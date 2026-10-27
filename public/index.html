@@ -580,12 +580,14 @@ const Demo = {
 // 実データ（収集サーバーの /api）
 // ============================================================
 const SESSION_GAP = 30 * 60;   // 30分なにもなければ帰ったとみなす
+const LEAVE_GRACE = 10;        // 「離れた」のあと、次のページを待つ秒数
 const Live = {
   key: (() => { try { return localStorage.getItem('dtm_key') || ''; } catch { return ''; } })(),
   lastId: 0,
   seq: 0,
   sessions: new Map(),      // セッション → 町にいる小人
   seenSessions: new Map(),  // きょう来たセッション → 種類（人数の集計用）
+  firstSeen: new Map(),     // セッション → 最初のイベント（来訪元はここから取る）
   dayStart: new Date(new Date().setHours(0, 0, 0, 0)).getTime(),
   async api(path){
     const res = await fetch(path, {headers: {'x-passcode': Live.key}});
@@ -603,7 +605,7 @@ const Live = {
       Live.buildTown(town, events);
       for (const ev of events) Live.handle(ev, false);
       // 読み込んだ時点で30分以上動きのない人は、もう帰っている
-      for (const a of agents.slice()) if (simS() - a.lastEvent > SESSION_GAP) Live.remove(a);
+      for (const a of agents.slice()) if (simS() - a.lastEvent > SESSION_GAP || (a.leaveAt && a.leaveAt <= simS())) Live.remove(a);
       log(`監視をはじめました（きょうのイベント ${events.length}件を読み込み）`);
       renderSide(); renderSuspects();
       setInterval(Live.poll, 3000);
@@ -620,7 +622,7 @@ const Live = {
     for (const z of zones) z.pages.sort((a, b) => (views[b.path] || 0) - (views[a.path] || 0) || a.title.localeCompare(b.title, 'ja'));
     // ページの多い区画を広い場所へ
     zones.sort((a, b) => b.pages.length - a.pages.length);
-    layoutTown(zones, {topTitle: town.pages.find(p => p.path === town.top)?.title});
+    layoutTown(zones);
   },
   polling: false,
   async poll(){
@@ -648,6 +650,7 @@ const Live = {
     Live.lastId = Math.max(Live.lastId, ev.id);
     const t = ev.ts / 1000;
     const isHuman = ev.kind === 'human';
+    if (!Live.firstSeen.has(ev.session)) Live.firstSeen.set(ev.session, ev);
     if (ev.ts >= Live.dayStart && !Live.seenSessions.has(ev.session)) {
       Live.seenSessions.set(ev.session, ev.kind);
       const hb = hourly[new Date(ev.ts).getHours()] ||= {humans:0, bots:0};
@@ -670,7 +673,8 @@ const Live = {
       a.lastEvent = t;
       const pl = a.pageLog[a.pageLog.length - 1];
       if (pl && pl.dur == null && ev.dwell_ms != null) pl.dur = ev.dwell_ms / 1000;
-      if (ev.final) { if (animate) a.leaveAt = simS() + 1.5; else Live.remove(a); }
+      // ページごとに読み込み直すサイトでは、次のページの前にも「離れた」が届く。少し待ってから帰らせる
+      if (ev.final) a.leaveAt = (animate ? simS() : t) + LEAVE_GRACE;
     } else if (ev.type === 'form_submit') {
       if (ev.kind === 'spam') {
         if (a) a.kind = 'spam';
@@ -680,6 +684,9 @@ const Live = {
     }
   },
   spawn(ev){
+    // 町を一度出て戻ってきた人も、来訪元は最初に来たときのもの
+    const first = Live.firstSeen.get(ev.session) || ev;
+    ev = {...ev, src: first.src, src_name: first.src_name};
     const a = newAgent(ev.kind === 'human' ? 'human' : ev.kind === 'spam' ? 'spam' : 'crawler', {
       id: ++Live.seq, live: true, session: ev.session, ip: ev.ip || '—',
       src: srcByKey(ev.src), referrer: ev.src_name || 'なし（ブックマーク・URL直接）',
@@ -693,6 +700,13 @@ const Live = {
     return a;
   },
   moveTo(a, h, t, animate){
+    // 前のページの家に着く前に次のページへ移った場合も、見たページとして記録する
+    if (a.state === 'walk' && a.route[a.step] && a.pendingT != null) {
+      const skipped = a.route[a.step];
+      a.history.push(skipped);
+      a.pageLog.push({h: skipped, t: a.pendingT, dur: Math.max(0, t - a.pendingT)});
+      if (a.kind === 'human') skipped.next[h.name] = (skipped.next[h.name] || 0) + 1;
+    }
     Live.leaveHouse(a, t);
     a.route.push(h); a.step = a.route.length - 1; a.pendingT = t;
     if (animate) { a.state = 'walk'; a.wp = route(a, doorSpot(h)); }
