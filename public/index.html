@@ -23,6 +23,7 @@ header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(
 .logo .site{color:var(--muted);font-size:11px}
 .mode{font-size:10px;padding:1px 6px;border-radius:3px;background:var(--chip);color:var(--muted);margin-left:6px;vertical-align:middle}
 .mode.live{background:var(--accent);color:#fff}
+.mode.down{background:var(--danger);color:#fff}
 .now{margin:0 auto;display:flex;align-items:baseline;gap:6px;font-size:14px}
 .now b{font-size:34px;line-height:1;color:var(--accent)}
 .now .sub{color:var(--muted);font-size:12px;margin-left:8px}
@@ -144,7 +145,6 @@ footer .lbl{font-size:12px;color:var(--muted)}
     <div class="now dot">いま <b id="nowCount">0</b> 人が見ています<span class="sub" id="nowRobots">ロボット 0</span></div>
     <div class="date" id="date"></div>
     <div class="clock dot" id="clock">--:--</div>
-    <div class="seg" id="viewSeg"><button class="on" data-v="town">町</button><button data-v="board">掲示板</button><button data-v="settings">設定</button></div>
     <div class="seg" id="skySeg"><button class="on" data-s="day">昼</button><button data-s="night">夜</button></div>
   </header>
 
@@ -184,8 +184,8 @@ footer .lbl{font-size:12px;color:var(--muted)}
   <footer>
     <span class="lbl" id="speedLbl">再生</span>
     <div class="seg" id="speedSeg"><button class="on" data-x="1">等速</button><button data-x="3">3倍</button><button data-x="10">10倍</button></div>
+    <span class="lbl">きょうの訪問（1時間ごと）</span>
     <canvas id="timeline"></canvas>
-    <div class="seg"><button class="on">きょう</button><button>7日</button><button>期間</button></div>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
@@ -598,7 +598,12 @@ const Live = {
   async start(){
     try {
       const town = await Live.api('/api/town');
-      const {events} = await Live.api(`/api/events?from=${Live.dayStart}&limit=5000`);
+      // きょうの分を、多いときは何回かに分けて読む
+      let {events} = await Live.api(`/api/events?from=${Live.dayStart}&limit=5000`);
+      for (let more = events; more.length === 5000;) {
+        more = (await Live.api(`/api/events?after=${more[more.length - 1].id}&limit=5000`)).events;
+        events = events.concat(more);
+      }
       townInfo = town;
       $('siteUrl').textContent = town.site.origin.replace(/^https?:\/\//, '') + '（計測タグ）';
       document.title = `${town.site.name} | ドット町モニター`;
@@ -608,12 +613,35 @@ const Live = {
       for (const a of agents.slice()) if (simS() - a.lastEvent > SESSION_GAP || (a.leaveAt && a.leaveAt <= simS())) Live.remove(a);
       log(`監視をはじめました（きょうのイベント ${events.length}件を読み込み）`);
       renderSide(); renderSuspects();
-      setInterval(Live.poll, 3000);
+      Live.setStatus(true);
+      Live.schedule();
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) Live.schedule(0); });
     } catch (e) {
       if (e.auth) return askKey(Live.key ? '合言葉がちがいます' : '');
       console.error(e);
-      log('収集サーバーにつながりません。しばらくして読み込み直してください', 'bad');
+      Live.setStatus(false);
+      log('収集サーバーにつながりません。30秒後にもう一度つなぎます', 'bad');
+      setTimeout(Live.start, 30000);
     }
+  },
+  // 取りにいく間隔。見ているときは5秒、画面が隠れているときは1分、つながらないときは30秒
+  timer: null,
+  schedule(ms){
+    clearTimeout(Live.timer);
+    const wait = ms ?? (!Live.ok ? 30000 : document.hidden ? 60000 : 5000);
+    Live.timer = setTimeout(async () => { await Live.poll(); Live.schedule(); }, wait);
+  },
+  ok: true,
+  lastOk: Date.now(),
+  setStatus(ok){
+    const changed = ok !== Live.ok;
+    Live.ok = ok;
+    if (ok) Live.lastOk = Date.now();
+    const m = $('mode');
+    m.textContent = ok ? 'ライブ' : '接続できません';
+    m.classList.toggle('live', ok); m.classList.toggle('down', !ok);
+    m.title = ok ? '' : `最後につながった時刻: ${new Date(Live.lastOk).toTimeString().slice(0, 5)}`;
+    if (changed) log(ok ? '収集サーバーにつながりました' : '収集サーバーにつながりません。計測が止まっている可能性があります', ok ? '' : 'bad');
   },
   buildTown(town, events){
     const views = {};
@@ -625,24 +653,32 @@ const Live = {
     layoutTown(zones);
   },
   polling: false,
+  // 区画のルールに当てはまらないページ（サーバーが家にしないもの）は、町を作り直さずにトップへ寄せる
+  unknownTried: new Set(),
   async poll(){
     if (Live.polling) return;
     Live.polling = true;
     try {
       const {events} = await Live.api(`/api/events?after=${Live.lastId}`);
-      // まだ町にないページが出てきたら、町を作り直す
-      if (events.some(e => e.type === 'page_view' && !houseByPath.has(e.path))) {
+      // まだ町にないページが出てきたら、サーバーが家にしたページだけを足して町を作り直す。
+      // 区画のルールに当てはまらないページは家にせず、トップの前に立たせる
+      const unknown = [...new Set(events.filter(e => (e.type === 'page_view' || e.type === 'page_resume') && !houseByPath.has(e.path)).map(e => e.path))]
+        .filter(p => !Live.unknownTried.has(p));
+      if (unknown.length) {
+        unknown.forEach(p => Live.unknownTried.add(p));
         const town = await Live.api('/api/town');
-        const unknown = events.filter(e => e.type === 'page_view' && !town.pages.some(p => p.path === e.path));
-        for (const e of unknown) town.pages.push({path:e.path, title:e.title || e.path, zone:town.zones[town.zones.length - 1]});
-        townInfo = town;
-        const counts = PAGES.flatMap(h => Array(h.total).fill({type:'page_view', kind:'human', path:h.path}));
-        Live.buildTown(town, counts);
-        for (const a of agents) if (a.at) { const s = doorSpot(a.at); a.x = s.x; a.y = s.y; }
+        if (town.pages.some(p => unknown.includes(p.path))) {
+          townInfo = town;
+          const counts = PAGES.flatMap(h => Array(h.total).fill({type:'page_view', kind:'human', path:h.path}));
+          Live.buildTown(town, counts);
+          for (const a of agents) if (a.at) { const s = doorSpot(a.at); a.x = s.x; a.y = s.y; }
+        }
       }
       for (const ev of events) Live.handle(ev, true);
+      Live.setStatus(true);
     } catch (e) {
       if (e.auth) askKey('合言葉がちがいます');
+      else Live.setStatus(false);
     } finally { Live.polling = false; }
   },
   houseFor(path){ return houseByPath.get(path) || TOP; },
@@ -650,23 +686,25 @@ const Live = {
     Live.lastId = Math.max(Live.lastId, ev.id);
     const t = ev.ts / 1000;
     const isHuman = ev.kind === 'human';
-    if (!Live.firstSeen.has(ev.session)) Live.firstSeen.set(ev.session, ev);
+    const newSession = !Live.firstSeen.has(ev.session);
+    if (newSession) Live.firstSeen.set(ev.session, ev);
     if (ev.ts >= Live.dayStart && !Live.seenSessions.has(ev.session)) {
       Live.seenSessions.set(ev.session, ev.kind);
       const hb = hourly[new Date(ev.ts).getHours()] ||= {humans:0, bots:0};
       if (isHuman) { stats.humans++; hb.humans++; } else { stats.bots++; hb.bots++; }
     }
     let a = Live.sessions.get(ev.session);
-    if (ev.type === 'page_view') {
+    // page_resume は別のタブから戻ってきただけ。小人は動かすが、閲覧数には数えない
+    if (ev.type === 'page_view' || ev.type === 'page_resume') {
       const h = Live.houseFor(ev.path);
-      if (isHuman && ev.ts >= Live.dayStart) { stats.views++; h.total++; }
+      if (ev.type === 'page_view' && isHuman && ev.ts >= Live.dayStart) { stats.views++; h.total++; }
       if (!a) {
         a = Live.spawn(ev);
-        if (animate && isHuman) log(`お客さん${a.id} が来ました（${a.src.key === 'direct' ? '直接' : a.referrer + 'から'}・${a.mobile ? 'スマホ' : 'パソコン'}）`);
-        if (animate && ev.kind === 'crawler') log(`${a.bot} が巡回に来ました`);
+        if (animate && isHuman && newSession) log(`お客さん${a.id} が来ました（${a.src.key === 'direct' ? '直接' : a.referrer + 'から'}・${a.mobile ? 'スマホ' : 'パソコン'}）`);
+        if (animate && ev.kind === 'crawler' && newSession) log(`${a.bot} が巡回に来ました`);
       }
       a.lastEvent = t; a.leaveAt = null;
-      a.reqs++;
+      if (ev.type === 'page_view') a.reqs++;
       if (h !== a.at || a.state === 'walk') Live.moveTo(a, h, t, animate);
     } else if (ev.type === 'page_leave') {
       if (!a) return;
@@ -1108,7 +1146,6 @@ function seg(id, fn){ $(id).querySelectorAll('button').forEach(b => b.onclick = 
 seg('speedSeg', b => speed = +b.dataset.x);
 seg('skySeg', b => night = b.dataset.s === 'night');
 seg('kFilter', b => { kFilter = b.dataset.k; renderKobito(); });
-seg('viewSeg', b => { if (b.dataset.v !== 'town') { toast('この画面は次の段階で作ります'); setTimeout(() => $('viewSeg').firstElementChild.click(), 600); } });
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1600); }
 
 function askKey(msg){

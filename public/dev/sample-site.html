@@ -20,7 +20,8 @@ form{margin-top:16px;display:none}
   <a href="/お問い合わせ">お問い合わせ</a>
 </nav>
 <h1 id="h"></h1>
-<form id="f"><input placeholder="お名前"> <button type="button">送信する</button></form>
+<!-- Wix のフォームと同じく、送信ボタンは type=button。空なら入力エラー、入っていれば内容を消して完了の文言を出す -->
+<form id="f"><input id="name" placeholder="お名前" aria-invalid="false"> <button type="button" id="send">送信</button><p id="msg"></p></form>
 <script>
   const show = p => {
     const name = p === '/' ? 'トップ' : decodeURIComponent(p).slice(1);
@@ -36,8 +37,15 @@ form{margin-top:16px;display:none}
     show(p);
   });
   addEventListener('popstate', () => show(location.pathname));
+  document.getElementById('send').addEventListener('click', () => {
+    const name = document.getElementById('name'), msg = document.getElementById('msg');
+    setTimeout(() => {
+      if (!name.value) { name.setAttribute('aria-invalid', 'true'); msg.textContent = '必須項目です'; return; }
+      name.setAttribute('aria-invalid', 'false'); name.value = ''; msg.textContent = '送信ありがとうございました';
+    }, 800);
+  });
   // 読み込み直すと404になるので、確認は最初の表示から続けて操作する
-  history.replaceState(null, '', '/');
+  history.replaceState(null, '', '/' + location.search);
   show('/');
 </script>
 <script src="/t.js" async></script>

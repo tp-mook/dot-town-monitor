@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS events (
 );
 CREATE INDEX IF NOT EXISTS idx_events_site_ts ON events (site, ts);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events (site, session);
+-- 画面が「前回の続き」を読むとき用（新しい分だけを読む）
+CREATE INDEX IF NOT EXISTS idx_events_site_id ON events (site, id);
 
 CREATE TABLE IF NOT EXISTS pages (
   site       TEXT NOT NULL,

@@ -5,7 +5,7 @@ compatibility_date = "2025-09-01"
 [assets]
 directory = "./public"
 binding = "ASSETS"
-run_worker_first = ["/api/*", "/collect"]
+run_worker_first = ["/api/*", "/collect", "/dev/*"]
 
 [[d1_databases]]
 binding = "DB"
@@ -15,6 +15,14 @@ database_id = "45ffbe4b-c076-4d4b-9b67-ccad481d179b"
 
 [vars]
 ALLOWED_ORIGINS = "https://www.vision-marketing.co.jp,https://vision-marketing.co.jp"
+IP_RETENTION_DAYS = "30"
+EVENT_RETENTION_DAYS = "400"
+
+# 計測タグの受け口：同じIPから1分に120回まで（ふつうの閲覧ではまず届かない）
+[[ratelimits]]
+name = "LIMITER"
+namespace_id = "1001"
+simple = { limit = 120, period = 60 }
 
 # 毎日 3:00（日本時間）にサイトマップを取り込む
 [triggers]

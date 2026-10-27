@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {detectBot, parseDevice, classifyReferrer, maskIp, cleanTitle, decodePath, zoneOf, isSpamForm} from '../src/lib.js';
+import {detectBot, parseDevice, classifyReferrer, maskIp, cleanTitle, decodePath, zoneOf, knownZone, isSpamForm} from '../src/lib.js';
 
 const site = JSON.parse(readFileSync(new URL('../sites/vision-marketing.json', import.meta.url)));
 const IPHONE = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
@@ -74,6 +74,13 @@ test('会社HPの区画の割り当て', () => {
   assert.equal(z('/まだない新しいページ'), '会社・その他');
   // 前方一致は「/blog」で始まる別ページを取り込まない
   assert.equal(z('/blogger'), '会社・その他');
+});
+
+test('ルールに当てはまらないページは家にしない判定に使う', () => {
+  assert.equal(knownZone('/post/new-article', site.zones), 'ブログ');
+  assert.equal(knownZone('/会社概要', site.zones), '会社・その他');
+  assert.equal(knownZone('/wp-admin/setup.php', site.zones), null);
+  assert.equal(knownZone('/まだない新しいページ', site.zones), null);
 });
 
 test('営業ロボットのフォーム送信', () => {

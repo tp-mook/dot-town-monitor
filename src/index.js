@@ -3,11 +3,14 @@
 //   GET  /api/town         町のつくり（区画とページ）
 //   GET  /api/events       イベント（?after=ID で続きだけ、?from=ミリ秒 でその時刻以降）
 //   POST /api/sync-sitemap サイトマップからページ一覧を取り込む（毎日の定期実行でも動く）
+//   POST /api/cleanup      古いデータを消す（毎日の定期実行でも動く）
 // 画面（public/）は静的ファイルとしてそのまま配る
 import site from '../sites/vision-marketing.json';
-import {detectBot, parseDevice, classifyReferrer, maskIp, cleanTitle, decodePath, zoneOf, isSpamForm} from './lib.js';
+import {detectBot, parseDevice, classifyReferrer, maskIp, cleanTitle, decodePath, zoneOf, knownZone, isSpamForm} from './lib.js';
 
-const TYPES = {v: 'page_view', l: 'page_leave', f: 'form_submit'};
+// r = タブに戻ってきた（同じページの見直しなので閲覧数に数えない）
+const TYPES = {v: 'page_view', l: 'page_leave', f: 'form_submit', r: 'page_resume'};
+const DAY = 86400000;
 const str = (v, n) => typeof v === 'string' ? v.slice(0, n) : '';
 
 export default {
@@ -20,16 +23,19 @@ export default {
         if (url.pathname === '/api/town' && req.method === 'GET') return await town(env);
         if (url.pathname === '/api/events' && req.method === 'GET') return await events(url, env);
         if (url.pathname === '/api/sync-sitemap' && req.method === 'POST') return json(await syncSitemap(env));
+        if (url.pathname === '/api/cleanup' && req.method === 'POST') return json(await cleanup(env));
         return json({error: 'not found'}, 404);
       }
     } catch (e) {
       console.error(e);
       return json({error: 'server error'}, 500);
     }
+    // 確認用ページ（public/dev/）はローカルでだけ出す
+    if (url.pathname.startsWith('/dev/') && env.DEV_PAGES !== '1') return new Response('not found', {status: 404});
     return env.ASSETS.fetch(req);
   },
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(syncSitemap(env));
+    ctx.waitUntil(Promise.all([syncSitemap(env), cleanup(env)]));
   },
 };
 
@@ -54,6 +60,12 @@ async function collect(req, env) {
   if (req.method !== 'POST') return new Response(null, {status: 405});
   // よそのサイトから送られたものは捨てる
   if (!allowed.includes(origin)) return new Response(null, {status: 403, headers: cors});
+  // 同じ相手からの送りすぎを止める（Origin は偽れるので、回数でも守る）
+  const rawIp = req.headers.get('cf-connecting-ip') || '';
+  if (env.LIMITER) {
+    const {success} = await env.LIMITER.limit({key: rawIp || 'unknown'});
+    if (!success) return new Response(null, {status: 429, headers: cors});
+  }
 
   const text = await req.text();
   if (text.length > 4000) return new Response(null, {status: 413, headers: cors});
@@ -69,6 +81,7 @@ async function collect(req, env) {
   const bot = detectBot(ua);
   const dev = parseDevice(ua);
   const path = decodePath(str(b.p, 600) || '/');
+  if (!path.startsWith('/')) return new Response(null, {status: 400, headers: cors});
   const ref = type === 'page_view' && b.r ? classifyReferrer(str(b.r, 500), new URL(site.origin).hostname) : null;
   let kind = bot ? 'crawler' : 'human';
 
@@ -83,16 +96,32 @@ async function collect(req, env) {
       kind, bot, device, os, browser, ip, dwell_ms, final) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     .bind(now, site.id, 'tag', type, b.v, b.s, Math.max(1, Math.min(9999, b.n | 0)), path, title,
       ref ? str(b.r, 500) : null, ref?.src ?? null, ref?.name ?? null,
-      kind, bot, dev.device, dev.os, dev.browser, maskIp(req.headers.get('cf-connecting-ip') || ''),
-      type === 'page_leave' ? Math.max(0, Math.min(86400000, b.d | 0)) : null, b.x ? 1 : 0)
+      kind, bot, dev.device, dev.os, dev.browser, maskIp(rawIp),
+      type === 'page_leave' ? Math.max(0, Math.min(DAY, b.d | 0)) : null, b.x ? 1 : 0)
     .run();
 
   if (type === 'page_view' && kind === 'human') {
-    await env.DB.prepare(`INSERT INTO pages (site, path, title, first_seen) VALUES (?,?,?,?)
-        ON CONFLICT(site, path) DO UPDATE SET title = CASE WHEN excluded.title <> '' THEN excluded.title ELSE pages.title END`)
-      .bind(site.id, path, title, now).run();
+    // 家を増やすのは区画のルールに当てはまるページだけ（でたらめなページ名で町を荒らされないように）。
+    // 名前はまだ無いときだけ入れる（サイトマップから取った名前を書き換えさせない）
+    if (path === site.top || knownZone(path, site.zones)) {
+      await env.DB.prepare(`INSERT INTO pages (site, path, title, first_seen) VALUES (?,?,?,?)
+          ON CONFLICT(site, path) DO UPDATE SET title = CASE WHEN pages.title = '' THEN excluded.title ELSE pages.title END`)
+        .bind(site.id, path, title, now).run();
+    } else if (title) {
+      await env.DB.prepare(`UPDATE pages SET title=? WHERE site=? AND path=? AND title=''`).bind(title, site.id, path).run();
+    }
   }
   return new Response(null, {status: 204, headers: cors});
+}
+
+// 古いデータを消す。IP アドレスは IP_RETENTION_DAYS 日、イベントは EVENT_RETENTION_DAYS 日で消す
+export async function cleanup(env) {
+  const now = Date.now();
+  const ipDays = Number(env.IP_RETENTION_DAYS) || 30;
+  const eventDays = Number(env.EVENT_RETENTION_DAYS) || 400;
+  const ip = await env.DB.prepare(`UPDATE events SET ip='' WHERE site=? AND ts<? AND ip<>''`).bind(site.id, now - ipDays * DAY).run();
+  const ev = await env.DB.prepare(`DELETE FROM events WHERE site=? AND ts<?`).bind(site.id, now - eventDays * DAY).run();
+  return {ipCleared: ip.meta.changes, eventsDeleted: ev.meta.changes};
 }
 
 async function town(env) {
@@ -117,10 +146,13 @@ async function events(url, env) {
   const after = Number(url.searchParams.get('after')) || 0;
   const from = Number(url.searchParams.get('from')) || 0;
   const limit = Math.min(5000, Number(url.searchParams.get('limit')) || 2000);
-  const {results} = await env.DB.prepare(`SELECT id, ts, type, visitor, session, visits, path, title, src, src_name, kind, bot,
-      device, os, browser, ip, dwell_ms, final FROM events WHERE site=? AND id>? AND ts>=? ORDER BY id LIMIT ?`)
-    .bind(site.id, after, from, limit).all();
-  return json({events: results, now: Date.now()});
+  // 続きを読むときは番号で、最初に読むときは時刻で絞る。
+  // 両方を一度に条件にすると、データベースが溜まった全件を読み直してしまう（無料枠の読み取り上限にすぐ届く）
+  const [cond, val] = after > 0 ? ['id>?', after] : ['ts>=?', from];
+  const {results, meta} = await env.DB.prepare(`SELECT id, ts, type, visitor, session, visits, path, title, src, src_name, kind, bot,
+      device, os, browser, ip, dwell_ms, final FROM events WHERE site=? AND ${cond} ORDER BY id LIMIT ?`)
+    .bind(site.id, val, limit).all();
+  return json({events: results, now: Date.now(), rowsRead: meta?.rows_read});
 }
 
 // サイトマップ（入れ子のものも）からページを集める

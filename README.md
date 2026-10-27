@@ -82,6 +82,16 @@ npx wrangler secret put PASSCODE
 <script src="https://dot-town-monitor.vision-marketing.workers.dev/t.js" async></script>
 ```
 
+### 社内の人を数えないようにする
+
+社内のパソコン・スマホで、監視しているサイトのどれかのページを `?dtm=off` を付けて一度開きます（例: https://www.vision-marketing.co.jp/?dtm=off ）。右下に「このブラウザは計測しません」と出たら、そのブラウザは以後計測されません。元に戻すには `?dtm=on` を付けて開きます。ブラウザごとの設定なので、使うブラウザそれぞれで行います。
+
+## 無料枠とデータの保存期間
+
+- 画面は、見ているときは 5 秒ごと、隠れているときは 1 分ごとに新しいイベントだけを取りにいく
+- 計測タグの受け口は、同じ IP アドレスから 1 分に 120 回まで
+- IP アドレスは 30 日、イベントは 400 日で消す（毎日 3:00 の定期実行。`wrangler.toml` の `IP_RETENTION_DAYS` / `EVENT_RETENTION_DAYS`）
+
 ## ライセンス
 
 未定

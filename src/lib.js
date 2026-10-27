@@ -93,14 +93,19 @@ export function decodePath(p = '/') {
   return s.slice(0, 300);
 }
 
-// 区画の割り当て。match は完全一致、末尾 * は前方一致
-export function zoneOf(path, zones) {
+// 区画のルールに当てはまるか。match は完全一致、末尾 * は前方一致。当てはまらなければ null
+export function knownZone(path, zones) {
   for (const z of zones) {
     for (const m of z.match || []) {
       if (m.endsWith('*') ? path.startsWith(m.slice(0, -1)) : path === m) return z.name;
     }
   }
-  return (zones.find(z => z.other) || zones[zones.length - 1]).name;
+  return null;
+}
+
+// 区画の割り当て。どのルールにも当てはまらないページは「その他」の区画へ
+export function zoneOf(path, zones) {
+  return knownZone(path, zones) ?? (zones.find(z => z.other) || zones[zones.length - 1]).name;
 }
 
 // ページをほとんど見ずにフォームを送ったものは営業ロボットとみなす
