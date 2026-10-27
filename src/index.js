@@ -125,8 +125,13 @@ export async function cleanup(env) {
 }
 
 async function town(env) {
-  const {results} = await env.DB.prepare(`SELECT path, title, in_sitemap FROM pages WHERE site=?`).bind(site.id).all();
+  const {results} = await env.DB.prepare(`SELECT path, title, in_sitemap, first_seen FROM pages WHERE site=?`).bind(site.id).all();
+  // 「新しいページ」= 町ができた日より後に見つかり、見つかってから3日以内のもの
+  // （町ができた日に取り込んだページは、全部その日が first_seen なので新しい扱いにしない）
+  const born = Math.min(...results.map(p => p.first_seen || Infinity));
+  const now = Date.now();
   const pages = results.map(p => ({
+    fresh: p.first_seen > born + DAY && p.first_seen > now - 3 * DAY,
     path: p.path,
     title: p.title || nameFromPath(p.path),
     zone: p.path === site.top ? null : zoneOf(p.path, site.zones),

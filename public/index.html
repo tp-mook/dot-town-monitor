@@ -33,6 +33,7 @@ header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(
 .seg button{border:0;background:var(--panel);padding:5px 10px;font:inherit;cursor:pointer;color:var(--ink)}
 .seg button+button{border-left:2px solid var(--ink)}
 .seg button.on{background:var(--ink);color:#fff}
+.sel{border:2px solid var(--ink);border-radius:6px;background:var(--panel);font:inherit;padding:4px 6px;color:var(--ink)}
 
 main{display:grid;grid-template-columns:1fr 310px;min-height:0}
 #stageWrap{position:relative;min-height:0;background:var(--grass);overflow:hidden}
@@ -145,7 +146,9 @@ footer .lbl{font-size:12px;color:var(--muted)}
     <div class="now dot">いま <b id="nowCount">0</b> 人が見ています<span class="sub" id="nowRobots">ロボット 0</span></div>
     <div class="date" id="date"></div>
     <div class="clock dot" id="clock">--:--</div>
-    <div class="seg" id="skySeg"><button class="on" data-s="day">昼</button><button data-s="night">夜</button></div>
+    <div class="seg" id="skySeg" title="空の色"><button data-v="auto">時刻</button><button data-v="day">昼</button><button data-v="evening">夕</button><button data-v="night">夜</button></div>
+    <div class="seg" id="snowSeg" title="雪（自動は12〜2月）"><button data-v="auto">自動</button><button data-v="on">雪</button><button data-v="off">なし</button></div>
+    <select id="seasonSel" class="sel" title="季節"><option value="auto">季節：自動</option><option value="spring">春</option><option value="summer">夏</option><option value="autumn">秋</option><option value="winter">冬</option></select>
   </header>
 
   <main>
@@ -245,8 +248,20 @@ function hoodSpr(f){
   return sprCache['hood' + f] ||= spr([...HOOD, LEGS[f]], {k:INK, r:'#c8302a', d:'#3a1a1a', y:'#ffe14a'});
 }
 const envSpr = spr(ENVELOPE, {k:INK, w:'#fff'});
-const treeSpr = spr(TREE, {k:'#264020', G:'#9be070', g:'#5aa83c', d:'#3d7d2a', b:'#7a4a24'});
-const houseSpr = roof => sprCache['h' + roof] ||= spr(HOUSE, {k:INK, R:roof, w:'#f7efd9', b:'#7ec8f0', d:'#8a5a2b'});
+// 木は季節で色を変える（G 明るい葉・g 葉・d 影）
+const TREE_COLORS = {
+  green:     ['#9be070', '#5aa83c', '#3d7d2a'],
+  deep:      ['#7ccf55', '#3f9a32', '#2c6e24'],
+  blossom:   ['#ffe0ec', '#f7a8c8', '#d97aa3'],
+  orange:    ['#ffd36a', '#f0a030', '#c96a20'],
+  red:       ['#ff9a7a', '#e0583a', '#a83a26'],
+  evergreen: ['#7da866', '#3f6e3a', '#2a4f2a'],
+  snowy:     ['#ffffff', '#4f8a3c', '#2f5f2a'],
+};
+const treeSpr = kind => sprCache['t' + kind] ||= spr(TREE, {k:'#264020', G:TREE_COLORS[kind][0], g:TREE_COLORS[kind][1], d:TREE_COLORS[kind][2], b:'#7a4a24'});
+// 雪の日は屋根の上3段を白くする
+const HOUSE_SNOW = HOUSE.map((r, j) => j >= 1 && j <= 3 ? r.replace(/R/g, 'S') : r);
+const houseSpr = (roof, snow) => sprCache['h' + roof + (snow ? 's' : '')] ||= spr(snow ? HOUSE_SNOW : HOUSE, {k:INK, R:roof, S:'#f4f8ff', w:'#f7efd9', b:'#7ec8f0', d:'#8a5a2b'});
 const mailSpr = spr(MAILBOX, {k:INK, R:'#d9443a', w:'#fff', b:'#6b4a2a'});
 
 // 来訪元（帽子の色）
@@ -306,14 +321,17 @@ function layoutTown(zones, opts = {}){
     const list = z.pages.length > cap ? z.pages.slice(0, cap - 1) : z.pages;
     const rest = z.pages.length > cap ? z.pages.slice(cap - 1) : [];
     const place = (h, i) => {
-      setPos(h, s.x + (s.cols === 4 ? 16 : 14) + (i % s.cols) * s.dx, s.y + 18 + (i / s.cols | 0) * 38);
+      h.order = i;
+      setPos(h,s.x + (s.cols === 4 ? 16 : 14) + (i % s.cols) * s.dx, s.y + 18 + (i / s.cols | 0) * 38);
       HOUSES.push(h);
     };
     list.forEach((p, i) => {
       const type = p.type || (p.form ? 'form' : 'house');
       const h = keep(p.path, () => mkHouse(p.title, p.path, 0, 0, {type,
-        roof: type === 'form' ? '#d9443a' : type === 'admin' ? '#4a4a55' : type === 'cgi' ? '#7d7d86' : ROOFS[(zi * 3 + i) % ROOFS.length]}));
-      h.name = p.title; h.zone = z.name; h.paths = [p.path]; h.type = type;
+        roof: type === 'form' ? '#d9443a' : type === 'admin' ? '#4a4a55' : type === 'cgi' ? '#7d7d86' : ROOFS[(zi * 3 + i) % ROOFS.length],
+        // 町を見ている最中に新しいページが増えたら、工事から始める
+        building: opts.animateNew && !old.has(p.path) ? {start: simS()} : null}));
+      h.name = p.title; h.zone = z.name; h.paths = [p.path]; h.type = type; h.fresh = !!p.fresh;
       place(h, i);
     });
     if (rest.length) {
@@ -339,15 +357,45 @@ function route(a, b){
   return [{x:a.x, y:ra}, {x:vx, y:ra}, {x:vx, y:rb}, {x:b.x, y:rb}, {x:b.x, y:b.y}];
 }
 
-// ===== 背景（静止部分）。町のつくりが変わったときだけ描き直す =====
+// ===== 季節と天気 =====
+// 地面・区画・道の色。雪の日は季節に関係なく雪の色
+const GROUND = {
+  spring: {grass:'#82c65a', dots:['#74b84d','#93d36c'], zone:'#a8da86', edge:'#5c9a3e', road:'#e8d6a6', roadDot:'#d8c18a', flowers:['#fff','#ffb3cf','#ff7a8a','#ffd84a'], flowerN:260},
+  summer: {grass:'#6fb84a', dots:['#62a840','#7fc658'], zone:'#94cc6e', edge:'#4f8c34', road:'#e6d3a1', roadDot:'#d6bf86', flowers:['#fff','#ffd84a','#ff7a8a'], flowerN:140},
+  autumn: {grass:'#a2b858', dots:['#95aa4c','#b3c566','#c9a84a'], zone:'#b9cc78', edge:'#7d8f3e', road:'#e2cc98', roadDot:'#cfb47c', flowers:['#e0583a','#f0a030','#ffd36a'], flowerN:200},
+  winter: {grass:'#98b48a', dots:['#8aa67c','#a8c39a'], zone:'#b0c9a3', edge:'#6f8c62', road:'#ddd2b4', roadDot:'#c9bc98', flowers:[], flowerN:0},
+  snow:   {grass:'#eef3f8', dots:['#dfe8f1','#ffffff','#d5e0ec'], zone:'#f7fafd', edge:'#b9c8d8', road:'#d7dde5', roadDot:'#c6ced9', flowers:[], flowerN:0},
+};
+const TREE_MIX = {
+  spring: [['blossom', .6], ['green', 1]],
+  summer: [['deep', 1]],
+  autumn: [['orange', .45], ['red', .8], ['green', 1]],
+  winter: [['evergreen', 1]],
+  snow:   [['snowy', 1]],
+};
+const seasonOf = d => { const m = d.getMonth() + 1; return m >= 3 && m <= 5 ? 'spring' : m >= 6 && m <= 8 ? 'summer' : m >= 9 && m <= 11 ? 'autumn' : 'winter'; };
+const sky = {mode:'auto', season:'auto', snow:'auto'};
+try { Object.assign(sky, JSON.parse(localStorage.getItem('dtm_sky') || '{}')); } catch { /* 前回の設定がなくても動く */ }
+const curSeason = () => sky.season === 'auto' ? seasonOf(new Date(simMs)) : sky.season;
+// 雪は「自動」なら冬（12〜2月）に降らせる
+const isSnow = () => sky.snow === 'auto' ? curSeason() === 'winter' : sky.snow === 'on';
+const groundKey = () => isSnow() ? 'snow' : curSeason();
+let drawnGround = null;
+
+// 街灯（道の交差点と道ぞい）。夜になると灯る
+const LAMPS = [[112,40],[128,40],[353,40],[369,40],[112,144],[128,144],[353,144],[369,144],[60,40],[185,40],[300,40],[425,40],[60,144],[185,144],[300,144],[425,144]];
+
+// ===== 背景（静止部分）。町のつくりや季節が変わったときだけ描き直す =====
 const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
 function drawBackground(){
   const g = bg.getContext('2d'), r = seeded(7);
-  g.fillStyle = '#7cbf55'; g.fillRect(0, 0, W, H);
-  for (let i = 0; i < 2600; i++) { g.fillStyle = r() < .5 ? '#6fb04a' : '#8acb62'; g.fillRect(r()*W|0, r()*H|0, 1, 1); }
+  const key = groundKey(), G = GROUND[key], snow = key === 'snow';
+  drawnGround = key;
+  g.fillStyle = G.grass; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2600; i++) { g.fillStyle = G.dots[i % G.dots.length]; const x = r()*W|0, y = r()*H|0; g.fillRect(x, y, 1, 1); }
   for (const z of ZONES) {
-    g.fillStyle = '#9fd47c'; g.fillRect(z.x, z.y, z.w, z.h);
-    g.fillStyle = '#5c9a3e';
+    g.fillStyle = G.zone; g.fillRect(z.x, z.y, z.w, z.h);
+    g.fillStyle = G.edge;
     g.fillRect(z.x, z.y, z.w, 1); g.fillRect(z.x, z.y + z.h - 1, z.w, 1);
     g.fillRect(z.x, z.y, 1, z.h); g.fillRect(z.x + z.w - 1, z.y, 1, z.h);
     if (z.fence) {
@@ -357,29 +405,34 @@ function drawBackground(){
     }
   }
   for (const rd of ROADS) {
-    g.fillStyle = '#e6d3a1'; g.fillRect(rd.x, rd.y, rd.w, rd.h);
-    g.fillStyle = '#d6bf86';
+    g.fillStyle = G.road; g.fillRect(rd.x, rd.y, rd.w, rd.h);
+    g.fillStyle = G.roadDot;
     for (let i = 0; i < rd.w * rd.h / 14; i++) g.fillRect(rd.x + r()*rd.w|0, rd.y + r()*rd.h|0, 1, 1);
   }
-  for (let i = 0; i < 140; i++) {
-    const x = r()*W|0, y = r()*H|0;
-    if (blocked(x, y, 1)) continue;
-    g.fillStyle = ['#fff','#ffd84a','#ff7a8a'][i % 3]; g.fillRect(x, y, 1, 1);
+  // 花（どの季節でも同じ場所に咲くよう、乱数は季節に関係なく同じ順で使う）
+  const fr = seeded(11);
+  for (let i = 0; i < 260; i++) {
+    const x = fr()*W|0, y = fr()*H|0;
+    if (i >= G.flowerN || blocked(x, y, 1)) continue;
+    g.fillStyle = G.flowers[i % G.flowers.length]; g.fillRect(x, y, 1, 1);
   }
-  const tr = seeded(42);
+  const tr = seeded(42), mix = TREE_MIX[key];
   for (let i = 0; i < 400; i++) {
-    const x = tr()*(W-11)|0, y = tr()*(H-11)|0;
+    const x = tr()*(W-11)|0, y = tr()*(H-11)|0, v = tr();
     if (blocked(x, y, 11, 11)) continue;
-    g.drawImage(treeSpr, x, y);
+    g.drawImage(treeSpr(mix.find(([, p]) => v < p)[0]), x, y);
   }
+  for (const [x, y] of LAMPS) { g.fillStyle = INK; g.fillRect(x, y - 5, 1, 6); g.fillRect(x - 1, y - 6, 3, 1); g.fillStyle = '#c9c2a8'; g.fillRect(x, y - 5, 1, 1); }
   const gx = GATE.x, gy = GATE.y;
   g.fillStyle = INK; g.fillRect(gx, gy + 3, 26, 5); g.fillStyle = '#b0503a'; g.fillRect(gx + 1, gy + 4, 24, 3);
+  if (snow) { g.fillStyle = '#f4f8ff'; g.fillRect(gx + 1, gy + 3, 24, 1); }
   for (const px of [gx + 2, gx + 20]) { g.fillStyle = INK; g.fillRect(px, gy + 8, 4, 16); g.fillStyle = '#a9a39a'; g.fillRect(px + 1, gy + 8, 2, 15); }
   for (const h of HOUSES) {
-    if (h.type === 'mansion') drawMansion(g, h.x, h.y);
+    if (h.building) { drawPlot(g, h); continue; }
+    if (h.type === 'mansion') drawMansion(g, h.x, h.y, snow);
     else if (h.type === 'pit') drawPit(g, h.x, h.y);
     else {
-      g.drawImage(houseSpr(h.roof), h.x, h.y);
+      g.drawImage(houseSpr(h.roof, snow), h.x, h.y);
       if (h.type === 'cgi') { g.fillStyle = INK; g.fillRect(h.x + 11, h.y - 1, 3, 5); g.fillStyle = '#9a9aa2'; g.fillRect(h.x + 12, h.y, 1, 4); }
       if (h.type === 'form') g.drawImage(mailSpr, h.x + 17, h.y + 7);
       if (h.type === 'admin') { g.fillStyle = '#ffd84a'; g.fillRect(h.x + 7, h.y + 3, 2, 2); }
@@ -392,13 +445,13 @@ function blocked(x, y, w = 1, h = 1){
     || hit({x:GATE.x, y:GATE.y, w:26, h:26}, 2) || hit({x:225, y:8, w:30, h:30}, 4)
     || (PIT && hit({x:PIT.x, y:PIT.y, w:24, h:12}, 6)) || y < 2;
 }
-function drawMansion(g, x, y){
+function drawMansion(g, x, y, snow){
   g.fillStyle = INK; g.fillRect(x + 14, y, 1, 9);
   g.fillStyle = '#e8443a'; g.fillRect(x + 15, y, 6, 4); g.fillStyle = INK; g.fillRect(x + 21, y, 1, 4);
   for (let i = 0; i < 9; i++) {
     const half = 2 + i * 1.6 | 0, cy = y + 7 + i;
     g.fillStyle = INK; g.fillRect(x + 15 - half, cy, half * 2, 1);
-    g.fillStyle = i % 3 === 2 ? '#b8332c' : '#d9443a'; g.fillRect(x + 16 - half, cy, half * 2 - 2, 1);
+    g.fillStyle = snow && i < 4 ? '#f4f8ff' : i % 3 === 2 ? '#b8332c' : '#d9443a'; g.fillRect(x + 16 - half, cy, half * 2 - 2, 1);
   }
   g.fillStyle = INK; g.fillRect(x, y + 16, 30, 1); g.fillRect(x + 1, y + 16, 1, 12); g.fillRect(x + 28, y + 16, 1, 12); g.fillRect(x + 1, y + 27, 28, 1);
   g.fillStyle = '#fbf3df'; g.fillRect(x + 2, y + 17, 26, 10);
@@ -418,8 +471,83 @@ function drawPit(g, x, y){
   g.fillStyle = '#c8302a'; g.fillRect(x + 26, y - 7, 2, 1); g.fillRect(x + 27, y - 6, 1, 1);
 }
 
+// ===== 新しい家の工事 =====
+const BUILD_SECONDS = 7;
+// 工事前の更地（背景に描く）
+function drawPlot(g, h){
+  g.fillStyle = '#8a6a44'; g.fillRect(h.x, h.y + 8, 16, 6);
+  g.fillStyle = '#a5845a'; for (let i = 0; i < 10; i++) g.fillRect(h.x + (i * 7) % 16, h.y + 9 + (i * 3) % 5, 1, 1);
+  g.fillStyle = '#e8d6a6'; for (const sx of [0, 15]) g.fillRect(h.x + sx, h.y + 6, 1, 8);
+}
+// 工事の進み具合を描く（動く部分）。終わったら家を背景に描き直す
+function drawBuilding(g, h, now){
+  const k = Math.min(1, (now - h.building.start) / BUILD_SECONDS);
+  if (k >= 1) {
+    h.building = null; h.builtAt = now;
+    drawBackground();
+    log(`新しい家が建ちました：「${h.name}」`, 'good');
+    toast(`🏠 新しい家が建ちました：${h.name}`);
+    return;
+  }
+  // 下から少しずつ家が立ち上がる
+  const sp = houseSpr(h.roof, drawnGround === 'snow'), rows = Math.max(1, Math.round(14 * Math.max(0, (k - .25) / .75)));
+  if (k > .25) g.drawImage(sp, 0, 14 - rows, 16, rows, h.x, h.y + 14 - rows, 16, rows);
+  // 足場
+  g.fillStyle = '#b0844e';
+  for (const sx of [-1, 16]) g.fillRect(h.x + sx, h.y + 1, 1, 13);
+  for (let yy = h.y + 3; yy < h.y + 14; yy += 4) g.fillRect(h.x - 1, yy, 18, 1);
+  // 大工さん（黄色いヘルメット）がトンカチをふる
+  // now は大きな数なので | 0 ではなく Math.floor で整数にする（| 0 だと桁あふれして負になる）
+  const swing = Math.floor(now * 4) % 2, cx = h.x + 18, cy = h.y + 3;
+  g.drawImage(personSpr('#ffd84a', '#4a7fd4', swing), cx, cy);
+  g.fillStyle = '#6b4a2a'; g.fillRect(cx - 1, cy + 6 - swing * 2, 1, 3);
+  g.fillStyle = '#9a9aa2'; g.fillRect(cx - 2, cy + 5 - swing * 2, 3, 1);
+  if (swing) { g.fillStyle = '#ffe14a'; g.fillRect(cx - 4, cy + 4, 1, 1); g.fillRect(cx - 3, cy + 2, 1, 1); }
+}
+// 建ったあと少しのあいだ、きらきらさせる
+function drawSparkle(g, h, now){
+  const t = now - h.builtAt;
+  if (t > 3) { h.builtAt = null; return; }
+  g.fillStyle = `rgba(255,240,150,${(1 - t / 3).toFixed(2)})`;
+  for (let i = 0; i < 6; i++) {
+    const an = i / 6 * Math.PI * 2 + t * 2, rr = 9 + t * 3;
+    g.fillRect(Math.round(h.x + 8 + Math.cos(an) * rr), Math.round(h.y + 7 + Math.sin(an) * rr * .7), 1, 1);
+  }
+}
+
+// ===== 空の色（時間帯） =====
+// 時刻ごとのかぶせる色 [時, r, g, b, 濃さ]
+const SKY_KEYS = [[0,16,24,70,.55],[4.5,16,24,70,.55],[5.5,110,80,150,.35],[6.5,255,170,120,.18],[7.5,0,0,0,0],
+  [16,0,0,0,0],[17,255,140,60,.2],[18,200,90,90,.3],[19,40,40,110,.5],[20,16,24,70,.55],[24,16,24,70,.55]];
+const SKY_FIXED = {day:12, evening:17.6, night:22};
+function skyTint(){
+  const d = new Date(simMs);
+  const hr = sky.mode === 'auto' ? d.getHours() + d.getMinutes() / 60 : SKY_FIXED[sky.mode];
+  let i = 0; while (SKY_KEYS[i + 1][0] < hr) i++;
+  const a = SKY_KEYS[i], b = SKY_KEYS[i + 1], k = (hr - a[0]) / (b[0] - a[0] || 1);
+  const mix = j => a[j] + (b[j] - a[j]) * k;
+  // 昼から色がつくとき・消えるときは、色そのものは相手側を使う
+  const pick = a[4] === 0 ? b : b[4] === 0 ? a : null;
+  const rgb = pick ? [pick[1], pick[2], pick[3]] : [mix(1), mix(2), mix(3)];
+  return {r:rgb[0] | 0, g:rgb[1] | 0, b:rgb[2] | 0, a:mix(4), dark: mix(4) > .3 && (hr >= 18 || hr < 6.5)};
+}
+
+// ===== 雪 =====
+const flakes = Array.from({length:160}, () => ({x:R() * W, y:R() * H, v:6 + R() * 10, s:R() < .25 ? 2 : 1, p:R() * 6}));
+let lastFlake = performance.now();
+function drawSnow(g){
+  const t = performance.now(), dt = Math.min(.1, (t - lastFlake) / 1000); lastFlake = t;
+  g.fillStyle = 'rgba(255,255,255,.9)';
+  for (const f of flakes) {
+    f.y += f.v * dt; f.x += Math.sin(t / 900 + f.p) * 4 * dt;
+    if (f.y > H) { f.y = -2; f.x = R() * W; }
+    if (f.x < 0) f.x += W; if (f.x > W) f.x -= W;
+    g.fillRect(f.x | 0, f.y | 0, f.s, f.s);
+  }
+}
+
 // ===== 状態 =====
-let speed = 1, night = false;
+let speed = 1;
 let simMs = Date.now();
 const simS = () => simMs / 1000;
 const agents = [], foots = [], puffs = [];
@@ -447,7 +575,7 @@ const Demo = {
   clock: {human:0, crawler:3, spam:8, attacker:6},
   init(){
     const P = (title, path, o = {}) => ({title, path, ...o});
-    layoutTown([
+    Demo.zones = [
       {name:'ブログ', pages:[P('ブログ一覧','/blog/'), P('生成AI活用術','/blog/ai-tips'), P('補助金まとめ','/blog/subsidy'), P('導入事例A社','/blog/case-a'),
         P('DX入門','/blog/dx'), P('社長日記','/blog/diary'), P('Excel自動化','/blog/excel'), P('セミナー報告','/blog/seminar')]},
       {name:'サービス', pages:[P('サービス一覧','/service/'), P('AI研修','/service/ai-training'), P('DX支援','/service/dx'), P('Web制作','/service/web'),
@@ -456,7 +584,8 @@ const Demo = {
       {name:'お問い合わせ', pages:[P('お問い合わせ','/contact/', {form:true}), P('予約CGI','/cgi-bin/reserve.cgi', {type:'cgi'}), P('資料ダウンロード','/download/')]},
       {name:'採用', pages:[P('採用情報','/recruit/'), P('募集要項','/recruit/jobs'), P('社員の声','/recruit/voice')]},
       {name:'管理画面', fence:true, pages:[P('ログイン画面','/wp-login.php', {type:'admin'})]},
-    ], {pit:true});
+    ];
+    layoutTown(Demo.zones, {pit:true});
     Object.assign(stats, {humans:118, views:342, bots:57, attacks:3});
     const cur = new Date(simMs).getHours();
     for (let h = 0; h <= cur; h++) {
@@ -566,7 +695,16 @@ const Demo = {
     if (nx) { a.state = 'walk'; a.wp = route(a, doorSpot(nx)); }
     else { a.state = 'leave'; a.wp = route(a, GATE.door); }
   },
+  // デモでは、始まってしばらくすると新しいページが公開されて家が建つ
+  started: null,
   tick(dt){
+    Demo.started ??= simS();
+    if (!Demo.published && simS() - Demo.started > 10) {
+      Demo.published = true;
+      Demo.zones.find(z => z.name === 'サービス').pages.push({title:'AIセミナー開催', path:'/service/seminar', fresh:true});
+      layoutTown(Demo.zones, {pit:true, animateNew:true});
+      log('新しいページが公開されました：「AIセミナー開催」');
+    }
     const c = Demo.clock;
     c.human -= dt; c.crawler -= dt; c.spam -= dt; c.attacker -= dt;
     if (c.human <= 0) { Demo.spawn('human'); c.human = rand(1.2, 3.2); }
@@ -616,6 +754,7 @@ const Live = {
       Live.setStatus(true);
       Live.schedule();
       document.addEventListener('visibilitychange', () => { if (!document.hidden) Live.schedule(0); });
+      Live.refreshTimer ||= setInterval(() => Live.refreshTown().catch(() => {}), 10 * 60 * 1000);
     } catch (e) {
       if (e.auth) return askKey(Live.key ? '合言葉がちがいます' : '');
       console.error(e);
@@ -643,14 +782,43 @@ const Live = {
     m.title = ok ? '' : `最後につながった時刻: ${new Date(Live.lastOk).toTimeString().slice(0, 5)}`;
     if (changed) log(ok ? '収集サーバーにつながりました' : '収集サーバーにつながりません。計測が止まっている可能性があります', ok ? '' : 'bad');
   },
-  buildTown(town, events){
+  // live = 町を見ている最中の作り直し。家の位置はなるべく変えず、新しいページは家を建てる
+  buildTown(town, events, live = false){
     const views = {};
     for (const e of events) if (e.type === 'page_view' && e.kind === 'human') views[e.path] = (views[e.path] || 0) + 1;
+    const byViews = (a, b) => (b.fresh - a.fresh) || (views[b.path] || 0) - (views[a.path] || 0) || a.title.localeCompare(b.title, 'ja');
     const zones = town.zones.map(name => ({name, pages: town.pages.filter(p => p.zone === name)}));
-    for (const z of zones) z.pages.sort((a, b) => (views[b.path] || 0) - (views[a.path] || 0) || a.title.localeCompare(b.title, 'ja'));
-    // ページの多い区画を広い場所へ
-    zones.sort((a, b) => b.pages.length - a.pages.length);
-    layoutTown(zones);
+    const prevZone = new Map(ZONES.map((z, i) => [z.name, i]));
+    if (live && prevZone.size) zones.sort((a, b) => (prevZone.get(a.name) ?? 99) - (prevZone.get(b.name) ?? 99));
+    else zones.sort((a, b) => b.pages.length - a.pages.length);   // ページの多い区画を広い場所へ
+    const prevIdx = new Map(), prevRest = new Set();
+    for (const h of HOUSES) {
+      if (h.path.startsWith('rest:')) h.paths.forEach(p => prevRest.add(p));
+      else if (h.zone) prevIdx.set(h.path, h.order);
+    }
+    zones.forEach((z, zi) => {
+      if (!live || !prevIdx.size) { z.pages.sort(byViews); return; }
+      const cap = SLOTS[zi] ? SLOTS[zi].cols * SLOTS[zi].rows : 0;
+      const visibleCap = z.pages.length > cap ? cap - 1 : cap;
+      const old = z.pages.filter(p => prevIdx.has(p.path)).sort((a, b) => prevIdx.get(a.path) - prevIdx.get(b.path));
+      const rest = z.pages.filter(p => prevRest.has(p.path)).sort(byViews);
+      const added = z.pages.filter(p => !prevIdx.has(p.path) && !prevRest.has(p.path)).sort(byViews);
+      // 新しいページには必ず家を建てる。入りきらなければ、いちばん後ろの家を「ほか」にまわす
+      const room = Math.max(0, visibleCap - added.length);
+      z.pages = [...old.slice(0, room), ...added, ...old.slice(room), ...rest];
+    });
+    layoutTown(zones, {animateNew: live});
+  },
+  // 町のつくりを取り直し、新しいページがあれば家を建てる（10分ごと、と知らないページが来たとき）
+  async refreshTown(){
+    const town = await Live.api('/api/town');
+    if (!town.pages.some(p => p.path !== town.top && !houseByPath.has(p.path))) return;
+    townInfo = town;
+    const was = new Map(HOUSES.map(h => [h, h.x + ',' + h.y]));
+    const counts = HOUSES.flatMap(h => Array(h.total).fill({type:'page_view', kind:'human', path:h.path}));
+    Live.buildTown(town, counts, true);
+    // 位置が変わった家の前にいた小人は、新しい位置へ移す
+    for (const a of agents) if (a.at && was.get(a.at) !== a.at.x + ',' + a.at.y) { const s = doorSpot(a.at); a.x = s.x; a.y = s.y; }
   },
   polling: false,
   // 区画のルールに当てはまらないページ（サーバーが家にしないもの）は、町を作り直さずにトップへ寄せる
@@ -666,13 +834,7 @@ const Live = {
         .filter(p => !Live.unknownTried.has(p));
       if (unknown.length) {
         unknown.forEach(p => Live.unknownTried.add(p));
-        const town = await Live.api('/api/town');
-        if (town.pages.some(p => unknown.includes(p.path))) {
-          townInfo = town;
-          const counts = PAGES.flatMap(h => Array(h.total).fill({type:'page_view', kind:'human', path:h.path}));
-          Live.buildTown(town, counts);
-          for (const a of agents) if (a.at) { const s = doorSpot(a.at); a.x = s.x; a.y = s.y; }
-        }
+        await Live.refreshTown();
       }
       for (const ev of events) Live.handle(ev, true);
       Live.setStatus(true);
@@ -813,7 +975,7 @@ function update(dt){
       foots.push({x: Math.round(a.x + (Math.abs(dy) > Math.abs(dx) ? side : 0)), y: Math.round(a.y + (Math.abs(dx) >= Math.abs(dy) ? side : 0)), t: now});
     }
   }
-  while (foots.length && now - foots[0].t > 90) foots.shift();
+  while (foots.length && now - foots[0].t > footLife()) foots.shift();
   if (foots.length > 5000) foots.splice(0, foots.length - 5000);
   for (let i = puffs.length - 1; i >= 0; i--) if (now - puffs[i].t > 1.2) puffs.splice(i, 1);
 }
@@ -834,19 +996,26 @@ function resize(){
 }
 addEventListener('resize', resize);
 
+// 雪の上の足あとは濃く、長く残る
+const footLife = () => drawnGround === 'snow' ? 240 : 90;
 function drawWorld(){
   const now = simS(), g = wg;
+  // 季節や雪の設定が変わったら（日付が変わったときも）背景を描き直す
+  if (groundKey() !== drawnGround) drawBackground();
+  const snow = drawnGround === 'snow', life = footLife();
   g.drawImage(bg, 0, 0);
   for (const f of foots) {
-    const al = 1 - (now - f.t) / 90;
-    g.fillStyle = `rgba(92,62,30,${(.55 * al).toFixed(2)})`; g.fillRect(f.x, f.y, 1, 1);
+    const al = Math.max(0, 1 - (now - f.t) / life);
+    g.fillStyle = snow ? `rgba(78,96,140,${(.8 * al).toFixed(2)})` : `rgba(92,62,30,${(.55 * al).toFixed(2)})`;
+    g.fillRect(f.x, f.y, 1, 1);
   }
+  for (const h of HOUSES) { if (h.building) drawBuilding(g, h, now); else if (h.builtAt) drawSparkle(g, h, now); }
   if (CGI) for (let i = 0; i < 3; i++) {
     const p = ((now * .6 + i / 3) % 1);
     g.fillStyle = `rgba(230,230,235,${(1 - p).toFixed(2)})`;
     g.fillRect(CGI.x + 12 + Math.round(Math.sin(p * 6 + i) * 1.5), CGI.y - 2 - Math.round(p * 9), 2, 2);
   }
-  if ((now * 2 | 0) % 2) { g.fillStyle = '#7cbf55'; g.fillRect(TOP.x + 20, TOP.y + 3, 1, 1); g.fillStyle = '#e8443a'; g.fillRect(TOP.x + 21, TOP.y + 1, 1, 2); }
+  if ((now * 2 | 0) % 2) { g.fillStyle = GROUND[drawnGround].grass; g.fillRect(TOP.x + 20, TOP.y + 3, 1, 1); g.fillStyle = '#e8443a'; g.fillRect(TOP.x + 21, TOP.y + 1, 1, 2); }
 
   const list = agents.slice().sort((p, q) => p.y - q.y);
   for (const a of list) {
@@ -868,10 +1037,19 @@ function drawWorld(){
     g.fillStyle = `rgba(255,255,255,${(1 - k).toFixed(2)})`;
     for (let i = 0; i < 8; i++) { const an = i / 8 * Math.PI * 2; g.fillRect(Math.round(p.x + Math.cos(an) * r), Math.round(p.y - 6 + Math.sin(an) * r * .6), 2, 2); }
   }
-  if (night) {
-    g.fillStyle = 'rgba(16,24,70,.55)'; g.fillRect(0, 0, W, H);
+  if (snow) drawSnow(g);
+  // 時間帯の空の色をかぶせる
+  const tint = skyTint();
+  if (tint.a > 0) { g.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${tint.a.toFixed(2)})`; g.fillRect(0, 0, W, H); }
+  if (tint.dark) {
+    // 夜は街灯と、人が見ている家の窓に明かりがつく
+    for (const [x, y] of LAMPS) {
+      g.fillStyle = 'rgba(255,220,140,.16)';
+      for (let r = 2; r <= 6; r += 2) { g.beginPath(); g.ellipse(x + .5, y, r * 1.4, r, 0, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = '#ffe58a'; g.fillRect(x - 1, y - 6, 3, 1);
+    }
     g.fillStyle = '#ffe58a';
-    for (const h of HOUSES) if (h.viewers > 0 && h.type !== 'mansion' && h.type !== 'pit') { g.fillRect(h.x + 3, h.y + 8, 2, 2); g.fillRect(h.x + 11, h.y + 8, 2, 2); }
+    for (const h of HOUSES) if (h.viewers > 0 && h.type !== 'mansion' && h.type !== 'pit' && !h.building) { g.fillRect(h.x + 3, h.y + 8, 2, 2); g.fillRect(h.x + 11, h.y + 8, 2, 2); }
     if (TOP.viewers > 0) for (const wx of [4, 9, 18, 23]) g.fillRect(TOP.x + wx, TOP.y + 19, 3, 3);
   }
 }
@@ -896,7 +1074,10 @@ function fitName(s, maxW){
 }
 function render(){
   drawWorld();
-  ctx.fillStyle = night ? '#3a4e3a' : '#7cbf55'; ctx.fillRect(0, 0, cv.width, cv.height);
+  // 町のまわりも、町と同じ地面の色と空の色にする
+  const tint = skyTint();
+  ctx.fillStyle = GROUND[drawnGround].grass; ctx.fillRect(0, 0, cv.width, cv.height);
+  if (tint.a > 0) { ctx.fillStyle = `rgba(${tint.r},${tint.g},${tint.b},${tint.a.toFixed(2)})`; ctx.fillRect(0, 0, cv.width, cv.height); }
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(world, ox, oy, W * S, H * S);
   const P = (x, y) => [ox + x * S, oy + y * S];
@@ -904,8 +1085,16 @@ function render(){
   { const [x, y] = P(GATE.x + 13, GATE.y + 3); label('入口', x, y, {bold:true}); }
   for (const h of HOUSES) {
     const [cx, ty] = P(h.x + h.w / 2, h.type === 'pit' ? h.y - 9 : h.y);
-    label(h.type === 'mansion' || h.type === 'pit' ? h.name : fitName(h.name, 46 * S), h.type === 'pit' ? cx - 8 * S : cx, ty - 2,
-      {bold: h === TOP, color: h.type === 'admin' ? '#7a1f18' : h.path.startsWith('rest:') ? '#6b5a3a' : INK, scale: h === TOP ? 1.15 : .92});
+    label(h.building ? '工事中…' : h.type === 'mansion' || h.type === 'pit' ? h.name : fitName(h.name, 46 * S), h.type === 'pit' ? cx - 8 * S : cx, ty - 2,
+      {bold: h === TOP, color: h.building ? '#8a5a2b' : h.type === 'admin' ? '#7a1f18' : h.path.startsWith('rest:') ? '#6b5a3a' : INK, scale: h === TOP ? 1.15 : .92});
+    // 公開されたばかりのページには「NEW」の札
+    if (h.fresh && !h.building) {
+      const [nx, ny] = P(h.x - 2, h.y + 1), fs = Math.round(Math.max(8 * dpr, S * 2.6));
+      ctx.font = `bold ${fs}px "DotGothic16", sans-serif`;
+      const tw = ctx.measureText('NEW').width + fs * .5;
+      ctx.fillStyle = '#e8443a'; ctx.fillRect(nx - tw / 2, ny - fs * .6, tw, fs * 1.15);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('NEW', nx, ny);
+    }
     if (h === selectedHouse) {
       const [x0, y0] = P(h.x - 2, h.y - 2);
       ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
@@ -1144,7 +1333,17 @@ $('popX').onclick = closePop;
 // ===== 操作 =====
 function seg(id, fn){ $(id).querySelectorAll('button').forEach(b => b.onclick = () => { $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); fn(b); }); }
 seg('speedSeg', b => speed = +b.dataset.x);
-seg('skySeg', b => night = b.dataset.s === 'night');
+// 空と季節の設定はこのブラウザに覚えておく
+function skySetting(key, val){
+  sky[key] = val;
+  try { localStorage.setItem('dtm_sky', JSON.stringify(sky)); } catch { /* 覚えられなくても今回は効く */ }
+}
+for (const [id, key] of [['skySeg', 'mode'], ['snowSeg', 'snow']]) {
+  $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === sky[key]));
+  seg(id, b => skySetting(key, b.dataset.v));
+}
+$('seasonSel').value = sky.season;
+$('seasonSel').onchange = e => skySetting('season', e.target.value);
 seg('kFilter', b => { kFilter = b.dataset.k; renderKobito(); });
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1600); }
 

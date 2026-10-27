@@ -90,7 +90,7 @@ npx wrangler secret put PASSCODE
 
 - 画面は、見ているときは 5 秒ごと、隠れているときは 1 分ごとに新しいイベントだけを取りにいく
 - 計測タグの受け口は、同じ IP アドレスから 1 分に 120 回まで
-- IP アドレスは 30 日、イベントは 400 日で消す（毎日 3:00 の定期実行。`wrangler.toml` の `IP_RETENTION_DAYS` / `EVENT_RETENTION_DAYS`）
+- IP アドレスは 30 日、イベントは 400 日で消す（毎時の定期実行。`wrangler.toml` の `IP_RETENTION_DAYS` / `EVENT_RETENTION_DAYS`）
 
 ## ライセンス
 
