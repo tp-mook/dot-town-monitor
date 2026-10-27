@@ -10,8 +10,8 @@ run_worker_first = ["/api/*", "/collect"]
 [[d1_databases]]
 binding = "DB"
 database_name = "dot-town"
-# 本番のIDは Cloudflare で D1 を作ったあとに書き換える
-database_id = "00000000-0000-0000-0000-000000000000"
+# 本番の D1（2026-10-27 作成）
+database_id = "45ffbe4b-c076-4d4b-9b67-ccad481d179b"
 
 [vars]
 ALLOWED_ORIGINS = "https://www.vision-marketing.co.jp,https://vision-marketing.co.jp"

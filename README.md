@@ -58,12 +58,28 @@ npm run simulate -- --minutes 10 --speed 2
 npm test
 ```
 
+## 本番（Cloudflare）
+
+- 画面: https://dot-town-monitor.vision-marketing.workers.dev/ （合言葉が必要）
+- 合言葉は Cloudflare の secrets（`PASSCODE`）に入れてある。リポジトリには書かない
+- デプロイ:
+
+```bash
+npx wrangler deploy
+```
+
+- 合言葉を変える:
+
+```bash
+npx wrangler secret put PASSCODE
+```
+
 ## 計測タグの入れかた
 
 監視するサイトの `</body>` の前（Wix は「設定 → カスタムコード」の「body - 末尾」）に入れます。
 
 ```html
-<script src="https://（収集サーバーのURL）/t.js" async></script>
+<script src="https://dot-town-monitor.vision-marketing.workers.dev/t.js" async></script>
 ```
 
 ## ライセンス
