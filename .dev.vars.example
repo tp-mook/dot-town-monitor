@@ -1,0 +1,3 @@
+# ローカル確認用。.dev.vars にコピーして使う（.dev.vars はコミットしない）
+PASSCODE=dev
+ALLOWED_ORIGINS=http://localhost:8787,http://127.0.0.1:8787

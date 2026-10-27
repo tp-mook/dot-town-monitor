@@ -1,0 +1,21 @@
+name = "dot-town-monitor"
+main = "src/index.js"
+compatibility_date = "2025-09-01"
+
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = ["/api/*", "/collect"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dot-town"
+# 本番のIDは Cloudflare で D1 を作ったあとに書き換える
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+ALLOWED_ORIGINS = "https://www.vision-marketing.co.jp,https://vision-marketing.co.jp"
+
+# 毎日 3:00（日本時間）にサイトマップを取り込む
+[triggers]
+crons = ["0 18 * * *"]

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ドット町モニター（UI試作）</title>
+<title>ドット町モニター</title>
 <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -21,6 +21,8 @@ header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(
 .logo canvas{width:27px;height:36px;image-rendering:pixelated}
 .logo .name{font-size:19px;line-height:1.1}
 .logo .site{color:var(--muted);font-size:11px}
+.mode{font-size:10px;padding:1px 6px;border-radius:3px;background:var(--chip);color:var(--muted);margin-left:6px;vertical-align:middle}
+.mode.live{background:var(--accent);color:#fff}
 .now{margin:0 auto;display:flex;align-items:baseline;gap:6px;font-size:14px}
 .now b{font-size:34px;line-height:1;color:var(--accent)}
 .now .sub{color:var(--muted);font-size:12px;margin-left:8px}
@@ -42,6 +44,7 @@ aside h3 small{font-family:inherit;color:var(--muted);font-size:11px}
 .stat{background:var(--chip);border-radius:6px;padding:6px 8px}
 .stat .k{font-size:11px;color:var(--muted)}
 .stat .v{font-family:"DotGothic16";font-size:20px}
+.stat .v small{font-size:10px;color:var(--muted);font-family:inherit;display:block;line-height:1.3}
 .stat.warn .v{color:var(--danger)}
 ol.rank{margin:0;padding:0;list-style:none}
 ol.rank li{display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px dashed var(--line)}
@@ -80,6 +83,7 @@ ul.log{list-style:none;margin:0;padding:0;font-size:12px}
 ul.log li{padding:3px 0;border-bottom:1px dashed var(--line);display:flex;gap:6px}
 ul.log time{font-family:"DotGothic16";color:var(--muted);flex:none}
 ul.log li.bad{color:var(--danger)}
+ul.log li.good{color:var(--accent);font-weight:bold}
 ul.log li.new{animation:flash 1.2s}
 @keyframes flash{from{background:#fff3b0}to{background:transparent}}
 
@@ -87,9 +91,9 @@ footer{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(
 footer .lbl{font-size:12px;color:var(--muted)}
 #timeline{flex:1;height:38px;min-width:120px}
 
-.pop{position:absolute;z-index:5;min-width:210px;max-width:270px;background:var(--panel);border:3px solid var(--ink);border-radius:6px;
+.pop{position:absolute;z-index:5;min-width:240px;max-width:300px;max-height:calc(100% - 12px);overflow:auto;background:var(--panel);border:3px solid var(--ink);border-radius:6px;
   padding:8px 10px;box-shadow:4px 4px 0 rgba(0,0,0,.25);font-size:12px;display:none}
-.pop h4{margin:0 0 4px;font-family:"DotGothic16";font-weight:normal;font-size:15px}
+.pop h4{margin:0 0 4px;font-family:"DotGothic16";font-weight:normal;font-size:15px;padding-right:14px}
 .pop .meta{color:var(--muted);margin-bottom:6px}
 .pop .route{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
 .pop .route span{background:var(--chip);border-radius:3px;padding:1px 5px}
@@ -97,7 +101,6 @@ footer .lbl{font-size:12px;color:var(--muted)}
 .pop table{border-collapse:collapse;width:100%}
 .pop td{padding:2px 0}
 .pop td:last-child{text-align:right;font-family:"DotGothic16"}
-.pop{max-width:300px;min-width:240px;max-height:calc(100% - 12px);overflow:auto}
 .pop table.nums td{border-bottom:1px dashed var(--line);padding:3px 0}
 .pop table.nums td:first-child{color:var(--muted);padding-right:10px;white-space:nowrap}
 .pop table.nums td:last-child{font-family:inherit;font-weight:bold}
@@ -112,6 +115,14 @@ footer .lbl{font-size:12px;color:var(--muted)}
 .toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:6px;
   font-family:"DotGothic16";opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
 .toast.on{opacity:1}
+.gate{position:fixed;inset:0;background:rgba(43,33,24,.55);display:none;align-items:center;justify-content:center;z-index:20}
+.gate.on{display:flex}
+.gate form{background:var(--panel);border:3px solid var(--ink);border-radius:8px;padding:18px 20px;width:min(320px,90vw);box-shadow:5px 5px 0 rgba(0,0,0,.3)}
+.gate h2{font-family:"DotGothic16";font-weight:normal;margin:0 0 10px;font-size:18px}
+.gate input{width:100%;font:inherit;padding:6px 8px;border:2px solid var(--ink);border-radius:4px}
+.gate button{margin-top:10px;width:100%;font:inherit;padding:6px;border:0;border-radius:4px;background:var(--ink);color:#fff;cursor:pointer}
+.gate .err{color:var(--danger);font-size:12px;min-height:1.2em;margin-top:6px}
+.gate a{font-size:12px;color:var(--muted)}
 
 @media (max-width:900px){
   .app{height:auto}
@@ -128,7 +139,7 @@ footer .lbl{font-size:12px;color:var(--muted)}
   <header>
     <div class="logo">
       <canvas id="logo" width="9" height="12"></canvas>
-      <div><div class="name dot">ドット町モニター</div><div class="site">https://www.example.co.jp/</div></div>
+      <div><div class="name dot">ドット町モニター<span class="mode" id="mode"></span></div><div class="site" id="siteUrl"></div></div>
     </div>
     <div class="now dot">いま <b id="nowCount">0</b> 人が見ています<span class="sub" id="nowRobots">ロボット 0</span></div>
     <div class="date" id="date"></div>
@@ -171,21 +182,34 @@ footer .lbl{font-size:12px;color:var(--muted)}
   </main>
 
   <footer>
-    <span class="lbl">再生</span>
+    <span class="lbl" id="speedLbl">再生</span>
     <div class="seg" id="speedSeg"><button class="on" data-x="1">等速</button><button data-x="3">3倍</button><button data-x="10">10倍</button></div>
     <canvas id="timeline"></canvas>
     <div class="seg"><button class="on">きょう</button><button>7日</button><button>期間</button></div>
   </footer>
 </div>
 <div class="toast" id="toast"></div>
+<div class="gate" id="gate">
+  <form id="gateForm">
+    <h2>合言葉を入れてください</h2>
+    <input id="gateKey" type="password" autocomplete="current-password" placeholder="合言葉">
+    <button>町を見る</button>
+    <div class="err" id="gateErr"></div>
+    <a href="?demo">デモデータで見る</a>
+  </form>
+</div>
 
 <script>
+// ?demo を付けるとデモデータで動く。付けなければ収集サーバー（/api）のデータで動く
+const DEMO = new URLSearchParams(location.search).has('demo');
+
 // ===== 町の大きさ（ドット単位） =====
 const W = 480, H = 270;
 const $ = id => document.getElementById(id);
 const R = Math.random;
 const pick = a => a[Math.floor(R() * a.length)];
 const rand = (a, b) => a + R() * (b - a);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function seeded(s){ return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
 
 // ===== ドット絵スプライト =====
@@ -227,53 +251,86 @@ const mailSpr = spr(MAILBOX, {k:INK, R:'#d9443a', w:'#fff', b:'#6b4a2a'});
 
 // 来訪元（帽子の色）
 const SOURCES = [
-  {key:'search', label:'検索から',      color:'#3b6fd6', w:5},
+  {key:'search', label:'検索から',        color:'#3b6fd6', w:5},
   {key:'direct', label:'直接・ブックマーク', color:'#3aa04a', w:2},
-  {key:'ai',     label:'AIチャットから',  color:'#9b59d0', w:1.5},
-  {key:'sns',    label:'SNSから',       color:'#e8a33a', w:1},
+  {key:'ai',     label:'AIチャットから',   color:'#9b59d0', w:1.5},
+  {key:'sns',    label:'SNSから',        color:'#e8a33a', w:1},
+  {key:'other',  label:'ほかのサイトから',  color:'#2fa3a3', w:.6},
 ];
+const srcByKey = k => SOURCES.find(s => s.key === k) || SOURCES[1];
 const CLOTHES = '#f4f1e8', RETURN_CLOTHES = '#f08a3c';
 
 // ===== 町のつくり =====
-const ZONES = [
-  {name:'会社案内',   x:8,   y:58,  w:104, h:84},
-  {name:'ブログ',     x:130, y:58,  w:222, h:84},
-  {name:'お問い合わせ', x:370, y:58,  w:102, h:84},
-  {name:'採用',       x:8,   y:164, w:104, h:98},
-  {name:'サービス',   x:130, y:164, w:222, h:98},
-  {name:'管理画面',   x:370, y:164, w:102, h:50, fence:true},
+// 区画を置く場所。広い場所から順に、ページの多い区画を割り当てる
+const SLOTS = [
+  {x:130, y:58,  w:222, h:84, cols:4, rows:2, dx:52},
+  {x:130, y:164, w:222, h:98, cols:4, rows:2, dx:52},
+  {x:8,   y:58,  w:104, h:84, cols:2, rows:2, dx:48},
+  {x:370, y:58,  w:102, h:84, cols:2, rows:2, dx:48},
+  {x:8,   y:164, w:104, h:98, cols:2, rows:2, dx:48},
+  {x:370, y:164, w:102, h:50, cols:2, rows:1, dx:48},
 ];
 const ROOFS = ['#d9534f','#4a7fd4','#e38b2c','#5aa65a','#8e5cc4','#3aa0a0'];
-let hid = 0;
-const H_ = (name, path, x, y, opt={}) => ({id:hid++, name, path, x, y, type:'house', roof:ROOFS[hid % ROOFS.length],
-  w:16, h:14, door:{x:x+8, y:y+15}, viewers:0, total:0, next:{}, ...opt});
-const HOUSES = [
-  H_('トップページ', '/', 225, 8, {type:'mansion', w:30, h:28, door:{x:240, y:37}}),
-  H_('会社概要', '/company/', 22, 76), H_('代表あいさつ', '/company/message', 70, 76),
-  H_('アクセス', '/company/access', 22, 114), H_('沿革', '/company/history', 70, 114),
-  H_('ブログ一覧', '/blog/', 146, 76), H_('生成AI活用術', '/blog/ai-tips', 198, 76),
-  H_('補助金まとめ', '/blog/subsidy', 250, 76), H_('導入事例A社', '/blog/case-a', 302, 76),
-  H_('DX入門', '/blog/dx', 146, 114), H_('社長日記', '/blog/diary', 198, 114),
-  H_('Excel自動化', '/blog/excel', 250, 114), H_('セミナー報告', '/blog/seminar', 302, 114),
-  H_('お問い合わせ', '/contact/', 384, 76, {type:'form', roof:'#d9443a'}),
-  H_('予約CGI', '/cgi-bin/reserve.cgi', 436, 76, {type:'cgi', roof:'#7d7d86'}),
-  H_('資料ダウンロード', '/download/', 410, 114),
-  H_('採用情報', '/recruit/', 22, 180), H_('募集要項', '/recruit/jobs', 70, 180), H_('社員の声', '/recruit/voice', 46, 220),
-  H_('サービス一覧', '/service/', 146, 180), H_('AI研修', '/service/ai-training', 198, 180),
-  H_('DX支援', '/service/dx', 250, 180), H_('Web制作', '/service/web', 302, 180),
-  H_('業務改善', '/service/kaizen', 172, 220), H_('料金', '/service/price', 276, 220),
-  H_('ログイン画面', '/wp-login.php', 412, 182, {type:'admin', roof:'#4a4a55'}),
-  H_('迷子の穴', '（存在しないページ）', 396, 230, {type:'pit', w:24, h:12, door:{x:408, y:244}}),
-];
-const byType = t => HOUSES.find(h => h.type === t);
-const TOP = byType('mansion'), FORM = byType('form'), ADMIN = byType('admin'), PIT = byType('pit');
-const PAGES = HOUSES.filter(h => !['admin','pit','cgi'].includes(h.type));
 const GATE = {x:6, y:6, door:{x:19, y:32}};
 const ROADS = [
   {x:0, y:44, w:W, h:7}, {x:0, y:148, w:W, h:8},
   {x:117, y:44, w:8, h:H-44}, {x:358, y:44, w:8, h:H-44}, {x:237, y:34, w:6, h:12},
   {x:16, y:28, w:6, h:18},
 ];
+let ZONES = [], HOUSES = [], PAGES = [];
+let TOP, FORM, ADMIN, PIT, CGI;
+const houseByPath = new Map();
+let townInfo = null;
+
+function mkHouse(name, path, x, y, opt = {}){
+  return {name, path, paths: [path], x, y, type:'house', w:16, h:14, door:{x:x+8, y:y+15},
+    viewers:0, total:0, next:{}, ...opt};
+}
+function setPos(h, x, y){
+  h.x = x; h.y = y;
+  h.door = h.type === 'pit' ? {x:x+12, y:y+14} : h.type === 'mansion' ? {x:x+15, y:y+29} : {x:x+8, y:y+15};
+}
+
+// zones: [{name, pages:[{path,title,form?,type?}], fence?}]  区画は SLOTS の順に置く
+function layoutTown(zones, opts = {}){
+  const old = new Map(HOUSES.map(h => [h.path, h]));
+  const keep = (path, make) => { const h = old.get(path) || make(); return h; };
+  HOUSES = []; ZONES = []; houseByPath.clear();
+  TOP = keep('/', () => mkHouse('トップページ', '/', 0, 0, {type:'mansion', w:30, h:28}));
+  TOP.name = opts.topTitle || 'トップページ';
+  setPos(TOP, 225, 8); HOUSES.push(TOP);
+  zones.slice(0, SLOTS.length).forEach((z, zi) => {
+    const s = SLOTS[zi];
+    ZONES.push({name:z.name, x:s.x, y:s.y, w:s.w, h:s.h, fence:z.fence});
+    const cap = s.cols * s.rows;
+    const list = z.pages.length > cap ? z.pages.slice(0, cap - 1) : z.pages;
+    const rest = z.pages.length > cap ? z.pages.slice(cap - 1) : [];
+    const place = (h, i) => {
+      setPos(h, s.x + (s.cols === 4 ? 16 : 14) + (i % s.cols) * s.dx, s.y + 18 + (i / s.cols | 0) * 38);
+      HOUSES.push(h);
+    };
+    list.forEach((p, i) => {
+      const type = p.type || (p.form ? 'form' : 'house');
+      const h = keep(p.path, () => mkHouse(p.title, p.path, 0, 0, {type,
+        roof: type === 'form' ? '#d9443a' : type === 'admin' ? '#4a4a55' : type === 'cgi' ? '#7d7d86' : ROOFS[(zi * 3 + i) % ROOFS.length]}));
+      h.name = p.title; h.zone = z.name; h.paths = [p.path]; h.type = type;
+      place(h, i);
+    });
+    if (rest.length) {
+      const key = 'rest:' + z.name;
+      const h = keep(key, () => mkHouse('', key, 0, 0, {roof:'#a08a6a'}));
+      h.name = `ほか ${rest.length}ページ`; h.zone = z.name; h.paths = rest.map(p => p.path); h.titles = rest.map(p => p.title);
+      place(h, list.length);
+    }
+  });
+  if (opts.pit) { PIT = keep('pit', () => mkHouse('迷子の穴', 'pit', 0, 0, {type:'pit', w:24, h:12})); setPos(PIT, 396, 230); PIT.paths = ['（存在しないページ）']; HOUSES.push(PIT); }
+  else PIT = null;
+  for (const h of HOUSES) for (const p of h.paths) houseByPath.set(p, h);
+  FORM = HOUSES.find(h => h.type === 'form'); ADMIN = HOUSES.find(h => h.type === 'admin'); CGI = HOUSES.find(h => h.type === 'cgi');
+  PAGES = HOUSES.filter(h => !['admin','pit','cgi'].includes(h.type) && !h.path.startsWith('rest:'));
+  drawBackground();
+}
+
 const roadY = y => y < 100 ? 47 : 152;
 function route(a, b){
   const ra = roadY(a.y), rb = roadY(b.y);
@@ -282,10 +339,9 @@ function route(a, b){
   return [{x:a.x, y:ra}, {x:vx, y:ra}, {x:vx, y:rb}, {x:b.x, y:rb}, {x:b.x, y:b.y}];
 }
 
-// ===== 背景（静止部分）を一度だけ描く =====
+// ===== 背景（静止部分）。町のつくりが変わったときだけ描き直す =====
 const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
-const TREES = [];
-(function drawBackground(){
+function drawBackground(){
   const g = bg.getContext('2d'), r = seeded(7);
   g.fillStyle = '#7cbf55'; g.fillRect(0, 0, W, H);
   for (let i = 0; i < 2600; i++) { g.fillStyle = r() < .5 ? '#6fb04a' : '#8acb62'; g.fillRect(r()*W|0, r()*H|0, 1, 1); }
@@ -305,25 +361,20 @@ const TREES = [];
     g.fillStyle = '#d6bf86';
     for (let i = 0; i < rd.w * rd.h / 14; i++) g.fillRect(rd.x + r()*rd.w|0, rd.y + r()*rd.h|0, 1, 1);
   }
-  // 花
   for (let i = 0; i < 140; i++) {
     const x = r()*W|0, y = r()*H|0;
     if (blocked(x, y, 1)) continue;
     g.fillStyle = ['#fff','#ffd84a','#ff7a8a'][i % 3]; g.fillRect(x, y, 1, 1);
   }
-  // 木
   const tr = seeded(42);
   for (let i = 0; i < 400; i++) {
     const x = tr()*(W-11)|0, y = tr()*(H-11)|0;
     if (blocked(x, y, 11, 11)) continue;
     g.drawImage(treeSpr, x, y);
-    TREES.push({x, y});
   }
-  // 入口の門
   const gx = GATE.x, gy = GATE.y;
   g.fillStyle = INK; g.fillRect(gx, gy + 3, 26, 5); g.fillStyle = '#b0503a'; g.fillRect(gx + 1, gy + 4, 24, 3);
   for (const px of [gx + 2, gx + 20]) { g.fillStyle = INK; g.fillRect(px, gy + 8, 4, 16); g.fillStyle = '#a9a39a'; g.fillRect(px + 1, gy + 8, 2, 15); }
-  // 家
   for (const h of HOUSES) {
     if (h.type === 'mansion') drawMansion(g, h.x, h.y);
     else if (h.type === 'pit') drawPit(g, h.x, h.y);
@@ -334,16 +385,16 @@ const TREES = [];
       if (h.type === 'admin') { g.fillStyle = '#ffd84a'; g.fillRect(h.x + 7, h.y + 3, 2, 2); }
     }
   }
-})();
+}
 function blocked(x, y, w = 1, h = 1){
   const hit = (r, m = 0) => x < r.x + r.w + m && x + w > r.x - m && y < r.y + r.h + m && y + h > r.y - m;
   return ZONES.some(z => hit(z, 3)) || ROADS.some(rd => hit(rd, 1))
-    || hit({x:GATE.x, y:GATE.y, w:26, h:26}, 2) || hit({x:TOP.x, y:TOP.y, w:30, h:30}, 4)
-    || hit({x:PIT.x, y:PIT.y, w:24, h:12}, 6) || y < 2;
+    || hit({x:GATE.x, y:GATE.y, w:26, h:26}, 2) || hit({x:225, y:8, w:30, h:30}, 4)
+    || (PIT && hit({x:PIT.x, y:PIT.y, w:24, h:12}, 6)) || y < 2;
 }
 function drawMansion(g, x, y){
   g.fillStyle = INK; g.fillRect(x + 14, y, 1, 9);
-  g.fillStyle = '#e8443a'; g.fillRect(x + 15, y, 6, 4); g.fillStyle = INK; g.fillRect(x + 21, y, 1, 4); g.fillRect(x + 15, y + 4, 7, 0);
+  g.fillStyle = '#e8443a'; g.fillRect(x + 15, y, 6, 4); g.fillStyle = INK; g.fillRect(x + 21, y, 1, 4);
   for (let i = 0; i < 9; i++) {
     const half = 2 + i * 1.6 | 0, cy = y + 7 + i;
     g.fillStyle = INK; g.fillRect(x + 15 - half, cy, half * 2, 1);
@@ -364,7 +415,7 @@ function drawPit(g, x, y){
   }
   g.fillStyle = '#7a4a24'; g.fillRect(x + 26, y - 6, 1, 10);
   g.fillStyle = INK; g.fillRect(x + 23, y - 9, 8, 6); g.fillStyle = '#f7efd9'; g.fillRect(x + 24, y - 8, 6, 4);
-  g.fillStyle = '#c8302a'; g.fillRect(x + 26, y - 7, 2, 1); g.fillRect(x + 27, y - 6, 1, 1); g.fillRect(x + 26, y - 5, 1, 0);
+  g.fillStyle = '#c8302a'; g.fillRect(x + 26, y - 7, 2, 1); g.fillRect(x + 27, y - 6, 1, 1);
 }
 
 // ===== 状態 =====
@@ -372,136 +423,334 @@ let speed = 1, night = false;
 let simMs = Date.now();
 const simS = () => simMs / 1000;
 const agents = [], foots = [], puffs = [];
-let agentSeq = 180, selected = null, selectedHouse = null;
-const stats = {humans:118, views:342, bots:57, attacks:3};
-const hourly = Array.from({length:24}, (_, h) => {
-  const cur = new Date(simMs).getHours();
-  if (h > cur) return null;
-  const base = Math.max(0, Math.sin((h - 6) / 15 * Math.PI)) * 14 + (h >= 9 && h <= 18 ? 6 : 0);
-  return {humans: Math.round(base + R() * 5), bots: Math.round(4 + R() * 6)};
-});
+let selected = null, selectedHouse = null;
+const stats = {humans:0, views:0, bots:0, attacks:0};
+const hourly = Array.from({length:24}, () => null);
 const suspects = [];
-HOUSES.forEach(h => { if (h.type !== 'pit' && h.type !== 'admin') h.total = Math.round(R() * 14 + (h === TOP ? 60 : h.path.startsWith('/blog') ? 12 : 4)); });
-byType('mansion').total = 74;
-HOUSES.find(h => h.path === '/blog/ai-tips').total = 41;
+const curHour = () => hourly[new Date(simMs).getHours()] ||= {humans:0, bots:0};
 
-const ip = () => pick(['203.0.113.','198.51.100.','192.0.2.']) + (R() * 250 + 2 | 0);
-
-function weightedSource(){
-  const t = SOURCES.reduce((s, x) => s + x.w, 0); let v = R() * t;
-  return SOURCES.find(s => (v -= s.w) < 0) || SOURCES[0];
-}
-function humanRoute(src){
-  const first = src.key === 'direct' ? TOP
-    : src.key === 'ai' ? pick(PAGES.filter(p => p.path.startsWith('/service') || p.path.startsWith('/blog')))
-    : src.key === 'sns' ? pick(PAGES.filter(p => p.path.startsWith('/blog/')))
-    : pick(PAGES);
-  const r = [first];
-  const n = 1 + (R() * 4 | 0);
-  for (let i = 0; i < n; i++) {
-    const cur = r[r.length - 1];
-    let nx;
-    const v = R();
-    if (v < .06) nx = PIT;
-    else if (v < .16) nx = FORM;
-    else if (v < .36) nx = TOP;
-    else {
-      const prefix = cur.path.split('/')[1];
-      const same = PAGES.filter(p => p !== cur && p.path.split('/')[1] === prefix);
-      nx = same.length && R() < .6 ? pick(same) : pick(PAGES);
-    }
-    if (nx !== cur) r.push(nx);
-    if (nx === PIT || nx === FORM) break;
-  }
-  return r;
-}
-
-function spawn(kind, opts = {}){
-  const a = {id: ++agentSeq, kind, x:GATE.door.x, y:GATE.door.y, wp:[], state:'walk', step:0, history:[], f:0, ft:0,
-    walked:0, lastFoot:0, ip:ip(), born:simS(), pageLog:[], reqs:0, notFound:0, ...opts};
-  if (kind === 'human') {
-    a.src = weightedSource(); a.returning = R() < .25; a.spd = rand(16, 22);
-    a.mobile = R() < .55; a.route = humanRoute(a.src);
-    a.visits = a.returning ? 2 + (R() * 7 | 0) : 1;
-    a.browser = a.mobile ? pick(['iPhone Safari','Android Chrome']) : pick(['Windows Chrome','Windows Edge','Mac Safari']);
-    a.referrer = {search: pick(['「AI研修 中小企業」','「補助金 DX」','「Excel 自動化 方法」','「会社名」']),
-      direct: 'なし（ブックマーク・URL直接）', ai: pick(['ChatGPT','Claude','Perplexity','Gemini']), sns: pick(['X','Facebook','Instagram'])}[a.src.key];
-    stats.humans++; curHour().humans++;
-  } else if (kind === 'crawler') {
-    a.spd = 34; a.bot = pick(['Googlebot','Bingbot','GPTBot','ClaudeBot','PerplexityBot']);
-    a.route = Array.from({length: 4 + (R() * 4 | 0)}, () => pick(PAGES));
-    stats.bots++; curHour().bots++;
-  } else if (kind === 'spam') {
-    a.spd = 30; a.route = [TOP, FORM]; a.letter = true; stats.bots++; curHour().bots++;
-  } else if (kind === 'attacker') {
-    a.spd = 42; a.route = [PIT, PIT, PIT, ADMIN, PIT, ADMIN, ADMIN]; a.tag = '下見';
-    a.uaNames = 1; a.loginTries = 0;
-    stats.attacks++;
-    const s = {agent:a, ip:a.ip, tag:'下見', hits:0, banned:false, first:clock()};
-    suspects.unshift(s); a.suspect = s;
-    log(`攻撃の疑い：${a.ip} が来ました（存在しないページを探しています）`, true);
-    renderSuspects();
-  }
-  a.wp = route(a, doorSpot(a.route[0], a));
-  agents.push(a);
-  return a;
-}
-function doorSpot(h, a){
+function doorSpot(h){
   if (h.type === 'pit') return {x: h.door.x + rand(-6, 6) | 0, y: h.y + 6};
   const spread = h.type === 'mansion' ? 12 : 8;
   return {x: Math.round(h.door.x + rand(-spread, spread)), y: Math.round(h.door.y + rand(2, 6))};
 }
+function newAgent(kind, opts){
+  return {kind, x:GATE.door.x, y:GATE.door.y, wp:[], state:'walk', step:0, route:[], history:[], f:0, ft:0,
+    walked:0, lastFoot:0, born:simS(), pageLog:[], reqs:0, notFound:0, ...opts};
+}
 
-function arrive(a){
-  const h = a.route[a.step];
-  a.at = h; h.viewers++; h.total += a.kind === 'human' ? 1 : 0;
-  a.history.push(h);
-  a.pageLog.push({h, t:simS(), dur:null});
-  if (a.kind === 'attacker') {
-    // 攻撃者は1か所で何回も要求を送る
-    const n = 3 + (R() * 9 | 0);
-    a.reqs += n;
-    if (h === PIT) a.notFound += n; else a.loginTries += n;
-    a.uaNames += R() * 3 | 0;
-  } else { a.reqs++; if (h === PIT) a.notFound++; }
-  if (a.kind === 'human') { stats.views++; if (h === PIT) log(`お客さん${a.id} がリンク切れで迷子の穴に落ちました`); else if (h === FORM) log(`お客さん${a.id} がお問い合わせフォームを開きました`); else if (R() < .35) log(`お客さん${a.id} が「${h.name}」を見ています`); }
-  if (a.kind === 'spam' && h === FORM) { a.letter = false; log(`フォーム営業ロボット(${a.ip})が手紙を投函しました`, true); }
-  if (a.kind === 'attacker') {
-    a.suspect.hits++;
-    if (h === ADMIN && a.tag !== '侵入?') {
-      a.tag = a.suspect.tag = '侵入?';
-      log(`【至急】${a.ip} がログイン画面で総当たりを試しています`, true);
+// ============================================================
+// デモデータ（?demo）
+// ============================================================
+const Demo = {
+  seq: 180,
+  clock: {human:0, crawler:3, spam:8, attacker:6},
+  init(){
+    const P = (title, path, o = {}) => ({title, path, ...o});
+    layoutTown([
+      {name:'ブログ', pages:[P('ブログ一覧','/blog/'), P('生成AI活用術','/blog/ai-tips'), P('補助金まとめ','/blog/subsidy'), P('導入事例A社','/blog/case-a'),
+        P('DX入門','/blog/dx'), P('社長日記','/blog/diary'), P('Excel自動化','/blog/excel'), P('セミナー報告','/blog/seminar')]},
+      {name:'サービス', pages:[P('サービス一覧','/service/'), P('AI研修','/service/ai-training'), P('DX支援','/service/dx'), P('Web制作','/service/web'),
+        P('業務改善','/service/kaizen'), P('料金','/service/price')]},
+      {name:'会社案内', pages:[P('会社概要','/company/'), P('代表あいさつ','/company/message'), P('アクセス','/company/access'), P('沿革','/company/history')]},
+      {name:'お問い合わせ', pages:[P('お問い合わせ','/contact/', {form:true}), P('予約CGI','/cgi-bin/reserve.cgi', {type:'cgi'}), P('資料ダウンロード','/download/')]},
+      {name:'採用', pages:[P('採用情報','/recruit/'), P('募集要項','/recruit/jobs'), P('社員の声','/recruit/voice')]},
+      {name:'管理画面', fence:true, pages:[P('ログイン画面','/wp-login.php', {type:'admin'})]},
+    ], {pit:true});
+    Object.assign(stats, {humans:118, views:342, bots:57, attacks:3});
+    const cur = new Date(simMs).getHours();
+    for (let h = 0; h <= cur; h++) {
+      const base = Math.max(0, Math.sin((h - 6) / 15 * Math.PI)) * 14 + (h >= 9 && h <= 18 ? 6 : 0);
+      hourly[h] = {humans: Math.round(base + R() * 5), bots: Math.round(4 + R() * 6)};
     }
-    renderSuspects();
-  }
-  const dur = a.kind === 'human' ? (h === PIT ? 1.5 : rand(3, 9)) : a.kind === 'attacker' ? .5 : a.kind === 'crawler' ? .6 : 2.5;
-  a.state = 'stay'; a.stayUntil = simS() + dur;
-}
-function depart(a){
-  const h = a.at; h.viewers--; a.at = null;
-  const pl = a.pageLog[a.pageLog.length - 1]; if (pl) pl.dur = simS() - pl.t;
-  const nx = a.route[a.step + 1];
-  if (nx && a.kind === 'human') h.next[nx.name] = (h.next[nx.name] || 0) + 1;
-  a.step++;
-  if (nx) { a.state = 'walk'; a.wp = route(a, doorSpot(nx, a)); }
-  else { a.state = 'leave'; a.wp = route(a, GATE.door); }
-}
+    PAGES.forEach(h => h.total = Math.round(R() * 14 + (h.path.startsWith('/blog') ? 12 : 4)));
+    TOP.total = 74; houseByPath.get('/blog/ai-tips').total = 41;
+    for (let i = 0; i < 9; i++) {
+      const a = Demo.spawn('human');
+      stats.humans--; curHour().humans--;
+      const s = doorSpot(a.route[0]);
+      a.x = s.x; a.y = s.y; a.wp = []; Demo.arrive(a); a.stayUntil = simS() + rand(1, 8);
+      a.born = a.pageLog[0].t = simS() - rand(5, 90);
+    }
+    for (let i = 0; i < 2; i++) { const a = Demo.spawn('crawler'); stats.bots--; const s = doorSpot(a.route[0]); a.x = s.x; a.y = s.y; a.wp = []; }
+    log('デモデータで動いています');
+  },
+  ip: () => pick(['203.0.113.','198.51.100.','192.0.2.']) + (R() * 250 + 2 | 0),
+  source(){
+    const t = SOURCES.reduce((s, x) => s + x.w, 0); let v = R() * t;
+    return SOURCES.find(s => (v -= s.w) < 0) || SOURCES[0];
+  },
+  humanRoute(src){
+    const first = src.key === 'direct' ? TOP
+      : src.key === 'ai' ? pick(PAGES.filter(p => p.path.startsWith('/service') || p.path.startsWith('/blog')))
+      : src.key === 'sns' ? pick(PAGES.filter(p => p.path.startsWith('/blog/')))
+      : pick(PAGES);
+    const r = [first];
+    const n = 1 + (R() * 4 | 0);
+    for (let i = 0; i < n; i++) {
+      const cur = r[r.length - 1];
+      let nx;
+      const v = R();
+      if (v < .06) nx = PIT;
+      else if (v < .16) nx = FORM;
+      else if (v < .36) nx = TOP;
+      else {
+        const prefix = cur.path.split('/')[1];
+        const same = PAGES.filter(p => p !== cur && p.path.split('/')[1] === prefix);
+        nx = same.length && R() < .6 ? pick(same) : pick(PAGES);
+      }
+      if (nx !== cur) r.push(nx);
+      if (nx === PIT || nx === FORM) break;
+    }
+    return r;
+  },
+  spawn(kind){
+    const a = newAgent(kind, {id: ++Demo.seq, ip: Demo.ip()});
+    if (kind === 'human') {
+      a.src = Demo.source(); a.returning = R() < .25; a.spd = rand(16, 22);
+      a.mobile = R() < .55; a.route = Demo.humanRoute(a.src);
+      a.visits = a.returning ? 2 + (R() * 7 | 0) : 1;
+      a.browser = a.mobile ? pick(['iPhone Safari','Android Chrome']) : pick(['Windows Chrome','Windows Edge','Mac Safari']);
+      a.referrer = {search: pick(['Google','Yahoo!','Bing']), direct: 'なし（ブックマーク・URL直接）', ai: pick(['ChatGPT','Claude','Perplexity','Gemini']),
+        sns: pick(['X','Facebook','Instagram']), other: pick(['note.com','prtimes.jp'])}[a.src.key];
+      stats.humans++; curHour().humans++;
+    } else if (kind === 'crawler') {
+      a.spd = 34; a.bot = pick(['Googlebot','Bingbot','GPTBot','ClaudeBot','PerplexityBot']);
+      a.route = Array.from({length: 4 + (R() * 4 | 0)}, () => pick(PAGES));
+      stats.bots++; curHour().bots++;
+    } else if (kind === 'spam') {
+      a.spd = 30; a.route = [TOP, FORM]; a.letter = true; stats.bots++; curHour().bots++;
+    } else if (kind === 'attacker') {
+      a.spd = 42; a.route = [PIT, PIT, PIT, ADMIN, PIT, ADMIN, ADMIN]; a.tag = '下見';
+      a.uaNames = 1; a.loginTries = 0;
+      stats.attacks++;
+      const s = {agent:a, ip:a.ip, tag:'下見', hits:0, banned:false, first:clock()};
+      suspects.unshift(s); a.suspect = s;
+      log(`攻撃の疑い：${a.ip} が来ました（存在しないページを探しています）`, 'bad');
+      renderSuspects();
+    }
+    a.wp = route(a, doorSpot(a.route[0]));
+    agents.push(a);
+    return a;
+  },
+  arrive(a){
+    const h = a.route[a.step];
+    a.at = h; h.viewers++; h.total += a.kind === 'human' ? 1 : 0;
+    a.history.push(h);
+    a.pageLog.push({h, t:simS(), dur:null});
+    if (a.kind === 'attacker') {
+      const n = 3 + (R() * 9 | 0);
+      a.reqs += n;
+      if (h === PIT) a.notFound += n; else a.loginTries += n;
+      a.uaNames += R() * 3 | 0;
+    } else { a.reqs++; if (h === PIT) a.notFound++; }
+    if (a.kind === 'human') { stats.views++; if (h === PIT) log(`お客さん${a.id} がリンク切れで迷子の穴に落ちました`); else if (h === FORM) log(`お客さん${a.id} がお問い合わせフォームを開きました`); else if (R() < .35) log(`お客さん${a.id} が「${h.name}」を見ています`); }
+    if (a.kind === 'spam' && h === FORM) { a.letter = false; log(`フォーム営業ロボット(${a.ip})が手紙を投函しました`, 'bad'); }
+    if (a.kind === 'attacker') {
+      a.suspect.hits++;
+      if (h === ADMIN && a.tag !== '侵入?') {
+        a.tag = a.suspect.tag = '侵入?';
+        log(`【至急】${a.ip} がログイン画面で総当たりを試しています`, 'bad');
+      }
+      renderSuspects();
+    }
+    const dur = a.kind === 'human' ? (h === PIT ? 1.5 : rand(3, 9)) : a.kind === 'attacker' ? .5 : a.kind === 'crawler' ? .6 : 2.5;
+    a.state = 'stay'; a.stayUntil = simS() + dur;
+  },
+  depart(a){
+    const h = a.at; h.viewers--; a.at = null;
+    const pl = a.pageLog[a.pageLog.length - 1]; if (pl) pl.dur = simS() - pl.t;
+    const nx = a.route[a.step + 1];
+    if (nx && a.kind === 'human') h.next[nx.name] = (h.next[nx.name] || 0) + 1;
+    a.step++;
+    if (nx) { a.state = 'walk'; a.wp = route(a, doorSpot(nx)); }
+    else { a.state = 'leave'; a.wp = route(a, GATE.door); }
+  },
+  tick(dt){
+    const c = Demo.clock;
+    c.human -= dt; c.crawler -= dt; c.spam -= dt; c.attacker -= dt;
+    if (c.human <= 0) { Demo.spawn('human'); c.human = rand(1.2, 3.2); }
+    if (c.crawler <= 0) { Demo.spawn('crawler'); c.crawler = rand(6, 12); }
+    if (c.spam <= 0) { Demo.spawn('spam'); c.spam = rand(25, 45); }
+    if (c.attacker <= 0) { Demo.spawn('attacker'); c.attacker = rand(40, 70); }
+  },
+};
 
+// ============================================================
+// 実データ（収集サーバーの /api）
+// ============================================================
+const SESSION_GAP = 30 * 60;   // 30分なにもなければ帰ったとみなす
+const Live = {
+  key: (() => { try { return localStorage.getItem('dtm_key') || ''; } catch { return ''; } })(),
+  lastId: 0,
+  seq: 0,
+  sessions: new Map(),      // セッション → 町にいる小人
+  seenSessions: new Map(),  // きょう来たセッション → 種類（人数の集計用）
+  dayStart: new Date(new Date().setHours(0, 0, 0, 0)).getTime(),
+  async api(path){
+    const res = await fetch(path, {headers: {'x-passcode': Live.key}});
+    if (res.status === 401) throw Object.assign(new Error('unauthorized'), {auth: true});
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return res.json();
+  },
+  async start(){
+    try {
+      const town = await Live.api('/api/town');
+      const {events} = await Live.api(`/api/events?from=${Live.dayStart}&limit=5000`);
+      townInfo = town;
+      $('siteUrl').textContent = town.site.origin.replace(/^https?:\/\//, '') + '（計測タグ）';
+      document.title = `${town.site.name} | ドット町モニター`;
+      Live.buildTown(town, events);
+      for (const ev of events) Live.handle(ev, false);
+      // 読み込んだ時点で30分以上動きのない人は、もう帰っている
+      for (const a of agents.slice()) if (simS() - a.lastEvent > SESSION_GAP) Live.remove(a);
+      log(`監視をはじめました（きょうのイベント ${events.length}件を読み込み）`);
+      renderSide(); renderSuspects();
+      setInterval(Live.poll, 3000);
+    } catch (e) {
+      if (e.auth) return askKey(Live.key ? '合言葉がちがいます' : '');
+      console.error(e);
+      log('収集サーバーにつながりません。しばらくして読み込み直してください', 'bad');
+    }
+  },
+  buildTown(town, events){
+    const views = {};
+    for (const e of events) if (e.type === 'page_view' && e.kind === 'human') views[e.path] = (views[e.path] || 0) + 1;
+    const zones = town.zones.map(name => ({name, pages: town.pages.filter(p => p.zone === name)}));
+    for (const z of zones) z.pages.sort((a, b) => (views[b.path] || 0) - (views[a.path] || 0) || a.title.localeCompare(b.title, 'ja'));
+    // ページの多い区画を広い場所へ
+    zones.sort((a, b) => b.pages.length - a.pages.length);
+    layoutTown(zones, {topTitle: town.pages.find(p => p.path === town.top)?.title});
+  },
+  polling: false,
+  async poll(){
+    if (Live.polling) return;
+    Live.polling = true;
+    try {
+      const {events} = await Live.api(`/api/events?after=${Live.lastId}`);
+      // まだ町にないページが出てきたら、町を作り直す
+      if (events.some(e => e.type === 'page_view' && !houseByPath.has(e.path))) {
+        const town = await Live.api('/api/town');
+        const unknown = events.filter(e => e.type === 'page_view' && !town.pages.some(p => p.path === e.path));
+        for (const e of unknown) town.pages.push({path:e.path, title:e.title || e.path, zone:town.zones[town.zones.length - 1]});
+        townInfo = town;
+        const counts = PAGES.flatMap(h => Array(h.total).fill({type:'page_view', kind:'human', path:h.path}));
+        Live.buildTown(town, counts);
+        for (const a of agents) if (a.at) { const s = doorSpot(a.at); a.x = s.x; a.y = s.y; }
+      }
+      for (const ev of events) Live.handle(ev, true);
+    } catch (e) {
+      if (e.auth) askKey('合言葉がちがいます');
+    } finally { Live.polling = false; }
+  },
+  houseFor(path){ return houseByPath.get(path) || TOP; },
+  handle(ev, animate){
+    Live.lastId = Math.max(Live.lastId, ev.id);
+    const t = ev.ts / 1000;
+    const isHuman = ev.kind === 'human';
+    if (ev.ts >= Live.dayStart && !Live.seenSessions.has(ev.session)) {
+      Live.seenSessions.set(ev.session, ev.kind);
+      const hb = hourly[new Date(ev.ts).getHours()] ||= {humans:0, bots:0};
+      if (isHuman) { stats.humans++; hb.humans++; } else { stats.bots++; hb.bots++; }
+    }
+    let a = Live.sessions.get(ev.session);
+    if (ev.type === 'page_view') {
+      const h = Live.houseFor(ev.path);
+      if (isHuman && ev.ts >= Live.dayStart) { stats.views++; h.total++; }
+      if (!a) {
+        a = Live.spawn(ev);
+        if (animate && isHuman) log(`お客さん${a.id} が来ました（${a.src.key === 'direct' ? '直接' : a.referrer + 'から'}・${a.mobile ? 'スマホ' : 'パソコン'}）`);
+        if (animate && ev.kind === 'crawler') log(`${a.bot} が巡回に来ました`);
+      }
+      a.lastEvent = t; a.leaveAt = null;
+      a.reqs++;
+      if (h !== a.at || a.state === 'walk') Live.moveTo(a, h, t, animate);
+    } else if (ev.type === 'page_leave') {
+      if (!a) return;
+      a.lastEvent = t;
+      const pl = a.pageLog[a.pageLog.length - 1];
+      if (pl && pl.dur == null && ev.dwell_ms != null) pl.dur = ev.dwell_ms / 1000;
+      if (ev.final) { if (animate) a.leaveAt = simS() + 1.5; else Live.remove(a); }
+    } else if (ev.type === 'form_submit') {
+      if (ev.kind === 'spam') {
+        if (a) a.kind = 'spam';
+        if (animate) log(`フォーム営業ロボットらしい送信がありました（${ev.ip || 'IP不明'}）`, 'bad');
+      } else if (animate) log(`お客さん${a ? a.id : ''} がお問い合わせを送信しました！`, 'good');
+      if (a) a.lastEvent = t;
+    }
+  },
+  spawn(ev){
+    const a = newAgent(ev.kind === 'human' ? 'human' : ev.kind === 'spam' ? 'spam' : 'crawler', {
+      id: ++Live.seq, live: true, session: ev.session, ip: ev.ip || '—',
+      src: srcByKey(ev.src), referrer: ev.src_name || 'なし（ブックマーク・URL直接）',
+      visits: ev.visits || 1, returning: (ev.visits || 1) > 1, mobile: ev.device === 'スマホ',
+      browser: [ev.os, ev.browser].filter(Boolean).join(' '), device: ev.device, bot: ev.bot || 'ロボット',
+      spd: ev.kind === 'human' ? rand(16, 22) : 34, lastEvent: ev.ts / 1000,
+    });
+    a.born = ev.ts / 1000;
+    Live.sessions.set(ev.session, a);
+    agents.push(a);
+    return a;
+  },
+  moveTo(a, h, t, animate){
+    Live.leaveHouse(a, t);
+    a.route.push(h); a.step = a.route.length - 1; a.pendingT = t;
+    if (animate) { a.state = 'walk'; a.wp = route(a, doorSpot(h)); }
+    else { const s = doorSpot(h); a.x = s.x; a.y = s.y; a.wp = []; Live.arrive(a); }
+  },
+  leaveHouse(a, t){
+    if (!a.at) return;
+    const pl = a.pageLog[a.pageLog.length - 1];
+    if (pl && pl.dur == null) pl.dur = Math.max(0, t - pl.t);
+    a.at.viewers--;
+    const nx = a.route[a.step + 1];
+    if (nx && a.kind === 'human') a.at.next[nx.name] = (a.at.next[nx.name] || 0) + 1;
+    a.prevHouse = a.at; a.at = null;
+  },
+  arrive(a){
+    const h = a.route[a.step];
+    if (a.prevHouse && a.kind === 'human') a.prevHouse.next[h.name] = (a.prevHouse.next[h.name] || 0) + 1;
+    a.prevHouse = null;
+    a.at = h; h.viewers++;
+    a.history.push(h);
+    a.pageLog.push({h, t: a.pendingT ?? simS(), dur: null});
+    a.state = 'stay'; a.stayUntil = Infinity;
+  },
+  startLeave(a){
+    Live.leaveHouse(a, simS());
+    Live.sessions.delete(a.session);
+    a.state = 'leave'; a.leaveAt = null; a.wp = route(a, GATE.door);
+  },
+  remove(a){
+    Live.leaveHouse(a, a.lastEvent);
+    Live.sessions.delete(a.session);
+    const i = agents.indexOf(a); if (i >= 0) agents.splice(i, 1);
+    if (selected === a) closePop();
+  },
+  tick(){
+    const now = simS();
+    for (const a of agents) {
+      if (a.state !== 'stay') continue;
+      if ((a.leaveAt && now >= a.leaveAt) || now - a.lastEvent > SESSION_GAP) Live.startLeave(a);
+    }
+    if (Date.now() - Live.dayStart > 86400000) location.reload();
+  },
+};
+
+// ===== 動き =====
 function update(dt){
-  // 出現（デモ用の頻度）
-  spawnClock.human -= dt; spawnClock.crawler -= dt; spawnClock.spam -= dt; spawnClock.attacker -= dt;
-  if (spawnClock.human <= 0) { spawn('human'); spawnClock.human = rand(1.2, 3.2); }
-  if (spawnClock.crawler <= 0) { spawn('crawler'); spawnClock.crawler = rand(6, 12); }
-  if (spawnClock.spam <= 0) { spawn('spam'); spawnClock.spam = rand(25, 45); }
-  if (spawnClock.attacker <= 0) { spawn('attacker'); spawnClock.attacker = rand(40, 70); }
-
+  if (DEMO) Demo.tick(dt); else Live.tick();
   const now = simS();
   for (let i = agents.length - 1; i >= 0; i--) {
     const a = agents[i];
     if (a.gone) { if (now - a.gone > .8) agents.splice(i, 1); continue; }
-    if (a.state === 'stay') { if (now >= a.stayUntil) depart(a); continue; }
+    if (a.state === 'stay') { if (DEMO && now >= a.stayUntil) Demo.depart(a); continue; }
     const t = a.wp[0];
-    if (!t) { if (a.state === 'leave') { agents.splice(i, 1); if (selected === a) closePop(); } else arrive(a); continue; }
+    if (!t) {
+      if (a.state === 'leave') { agents.splice(i, 1); if (selected === a) closePop(); }
+      else if (a.live) Live.arrive(a); else Demo.arrive(a);
+      continue;
+    }
     const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy), st = a.spd * dt;
     if (d <= st) { a.x = t.x; a.y = t.y; a.wp.shift(); } else { a.x += dx / d * st; a.y += dy / d * st; }
     a.walked += Math.min(d, st);
@@ -516,7 +765,6 @@ function update(dt){
   if (foots.length > 5000) foots.splice(0, foots.length - 5000);
   for (let i = puffs.length - 1; i >= 0; i--) if (now - puffs[i].t > 1.2) puffs.splice(i, 1);
 }
-const spawnClock = {human:0, crawler:3, spam:8, attacker:6};
 
 // ===== 描画 =====
 const cv = $('stage'), ctx = cv.getContext('2d');
@@ -537,19 +785,15 @@ addEventListener('resize', resize);
 function drawWorld(){
   const now = simS(), g = wg;
   g.drawImage(bg, 0, 0);
-  // 足あと
   for (const f of foots) {
     const al = 1 - (now - f.t) / 90;
     g.fillStyle = `rgba(92,62,30,${(.55 * al).toFixed(2)})`; g.fillRect(f.x, f.y, 1, 1);
   }
-  // 工房の煙
-  const cgi = byType('cgi');
-  for (let i = 0; i < 3; i++) {
+  if (CGI) for (let i = 0; i < 3; i++) {
     const p = ((now * .6 + i / 3) % 1);
     g.fillStyle = `rgba(230,230,235,${(1 - p).toFixed(2)})`;
-    g.fillRect(cgi.x + 12 + Math.round(Math.sin(p * 6 + i) * 1.5), cgi.y - 2 - Math.round(p * 9), 2, 2);
+    g.fillRect(CGI.x + 12 + Math.round(Math.sin(p * 6 + i) * 1.5), CGI.y - 2 - Math.round(p * 9), 2, 2);
   }
-  // トップの旗をゆらす
   if ((now * 2 | 0) % 2) { g.fillStyle = '#7cbf55'; g.fillRect(TOP.x + 20, TOP.y + 3, 1, 1); g.fillStyle = '#e8443a'; g.fillRect(TOP.x + 21, TOP.y + 1, 1, 2); }
 
   const list = agents.slice().sort((p, q) => p.y - q.y);
@@ -575,7 +819,7 @@ function drawWorld(){
   if (night) {
     g.fillStyle = 'rgba(16,24,70,.55)'; g.fillRect(0, 0, W, H);
     g.fillStyle = '#ffe58a';
-    for (const h of HOUSES) if (h.viewers > 0 && h.type === 'house') { g.fillRect(h.x + 3, h.y + 8, 2, 2); g.fillRect(h.x + 11, h.y + 8, 2, 2); }
+    for (const h of HOUSES) if (h.viewers > 0 && h.type !== 'mansion' && h.type !== 'pit') { g.fillRect(h.x + 3, h.y + 8, 2, 2); g.fillRect(h.x + 11, h.y + 8, 2, 2); }
     if (TOP.viewers > 0) for (const wx of [4, 9, 18, 23]) g.fillRect(TOP.x + wx, TOP.y + 19, 3, 3);
   }
 }
@@ -589,19 +833,27 @@ function label(text, x, y, opt = {}){
   ctx.fillStyle = opt.color || INK; ctx.fillText(text, x, y);
   return fs;
 }
+// 家の名前は家と家の間に収まる幅で切る（label と同じ文字の大きさで測る）
+function fitName(s, maxW){
+  const fs = Math.round(Math.max(10 * dpr, Math.min(14 * dpr, S * 3.6)) * .92);
+  ctx.font = `${fs}px "DotGothic16", sans-serif`;
+  if (ctx.measureText(s).width <= maxW) return s;
+  let c = [...s];
+  while (c.length > 1 && ctx.measureText(c.join('') + '…').width > maxW) c.pop();
+  return c.join('') + '…';
+}
 function render(){
   drawWorld();
   ctx.fillStyle = night ? '#3a4e3a' : '#7cbf55'; ctx.fillRect(0, 0, cv.width, cv.height);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(world, ox, oy, W * S, H * S);
   const P = (x, y) => [ox + x * S, oy + y * S];
-  // 区画の名前
   for (const z of ZONES) { const [x, y] = P(z.x + 3, z.y + 1); label(z.name, x, y, {align:'left', color:'#2f5a22', scale:.95}); }
   { const [x, y] = P(GATE.x + 13, GATE.y + 3); label('入口', x, y, {bold:true}); }
-  // 家の名前と人数
   for (const h of HOUSES) {
     const [cx, ty] = P(h.x + h.w / 2, h.type === 'pit' ? h.y - 9 : h.y);
-    const fs = label(h.name, h.type === 'pit' ? cx - 8 * S : cx, ty - 2, {bold: h === TOP, color: h.type === 'admin' ? '#7a1f18' : INK, scale: h === TOP ? 1.15 : .92});
+    label(h.type === 'mansion' || h.type === 'pit' ? h.name : fitName(h.name, 46 * S), h.type === 'pit' ? cx - 8 * S : cx, ty - 2,
+      {bold: h === TOP, color: h.type === 'admin' ? '#7a1f18' : h.path.startsWith('rest:') ? '#6b5a3a' : INK, scale: h === TOP ? 1.15 : .92});
     if (h === selectedHouse) {
       const [x0, y0] = P(h.x - 2, h.y - 2);
       ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
@@ -617,7 +869,6 @@ function render(){
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(h.viewers, bx, by + dpr);
     }
   }
-  // 選択中の小人の名札
   if (selected && !selected.gone) {
     const [x, y] = P(selected.x, selected.y - 13);
     label(nameOf(selected), x, y, {color:'#fff', stroke:INK, scale:.9});
@@ -626,19 +877,18 @@ function render(){
 const nameOf = a => a.kind === 'human' ? `お客さん${a.id}` : a.kind === 'crawler' ? a.bot : a.kind === 'spam' ? '営業ロボット' : `要注意 ${a.ip}`;
 
 // ===== 画面の情報（右の欄など） =====
-function clock(){ const d = new Date(simMs); return d.toTimeString().slice(0, 5); }
-const curHour = () => hourly[new Date(simMs).getHours()] ||= {humans:0, bots:0};
-function log(text, bad){
+function clock(){ return new Date(simMs).toTimeString().slice(0, 5); }
+function log(text, cls){
   const li = document.createElement('li');
-  li.className = 'new' + (bad ? ' bad' : '');
+  li.className = 'new' + (cls ? ' ' + cls : '');
   li.innerHTML = `<time>${clock()}</time><span></span>`;
   li.lastChild.textContent = text;
   const ul = $('log'); ul.prepend(li);
   while (ul.children.length > 50) ul.lastChild.remove();
 }
 function renderSide(){
-  const humansNow = agents.filter(a => a.kind === 'human' && !a.gone).length;
-  const botsNow = agents.filter(a => a.kind !== 'human' && !a.gone).length;
+  const humansNow = agents.filter(a => a.kind === 'human' && !a.gone && a.state !== 'leave').length;
+  const botsNow = agents.filter(a => a.kind !== 'human' && !a.gone && a.state !== 'leave').length;
   $('nowCount').textContent = humansNow;
   $('nowRobots').textContent = `ロボット ${botsNow}（人数に含めない）`;
   const d = new Date(simMs);
@@ -648,41 +898,17 @@ function renderSide(){
   $('sHumans').textContent = stats.humans.toLocaleString();
   $('sViews').textContent = stats.views.toLocaleString();
   $('sBots').textContent = stats.bots.toLocaleString();
-  $('sAttacks').textContent = stats.attacks.toLocaleString();
-  const top = PAGES.slice().sort((p, q) => q.total - p.total).slice(0, 6), max = top[0].total;
-  $('rank').innerHTML = top.map((h, i) => `<li><span class="n">${i + 1}</span><div class="t">${h.name}<div class="bar" style="width:${(h.total / max * 100).toFixed(0)}%"></div></div><span class="c">${h.total}</span></li>`).join('');
+  $('sAttacks').innerHTML = DEMO ? stats.attacks.toLocaleString() : '—<small>計測タグでは映りません</small>';
+  const top = HOUSES.filter(h => h.type !== 'pit' && h.type !== 'admin' && h.total > 0).sort((p, q) => q.total - p.total).slice(0, 6);
+  const max = top[0]?.total || 1;
+  $('rank').innerHTML = top.length ? top.map((h, i) => `<li><span class="n">${i + 1}</span><div class="t">${esc(h.name)}<div class="bar" style="width:${(h.total / max * 100).toFixed(0)}%"></div></div><span class="c">${h.total}</span></li>`).join('')
+    : '<li class="empty">まだ見られていません</li>';
   drawTimeline();
   renderKobito();
 }
-let kFilter = 'human';
-const iconCache = {};
-function agentIcon(a){
-  const s = a.kind === 'human' ? personSpr(a.src.color, a.returning ? RETURN_CLOTHES : CLOTHES, 0)
-    : a.kind === 'crawler' ? robotSpr('#a9bccf', '#3cf', 0) : a.kind === 'spam' ? robotSpr('#e5c34a', '#e33', 0) : hoodSpr(0);
-  const key = a.kind + (a.src ? a.src.color : '') + (a.returning ? 'r' : '');
-  return iconCache[key] ||= s.toDataURL();
-}
-function renderKobito(){
-  const live = agents.filter(a => !a.gone && (kFilter === 'human') === (a.kind === 'human'));
-  live.sort((p, q) => p.born - q.born);
-  $('kobitoCount').textContent = `${live.length}人`;
-  const now = simS();
-  const box = $('kobitoList');
-  if (!live.length) { box.innerHTML = '<div class="empty">いません</div>'; return; }
-  box.innerHTML = '';
-  for (const a of live.slice(0, 12)) {
-    const where = a.at ? `${a.at.name}を見ている` : a.state === 'leave' ? '帰るところ' : `${a.route[a.step]?.name ?? ''}へ移動中`;
-    const row = document.createElement('div');
-    row.className = 'krow' + (a === selected ? ' sel' : '') + (a.kind === 'attacker' ? ' bad' : '');
-    row.innerHTML = `<img src="${agentIcon(a)}" alt=""><span class="kn"></span><span>${a.kind === 'attacker' ? a.reqs + '回' : a.pageLog.length}</span><span>${fmt(now - a.born)}</span>`;
-    row.querySelector('.kn').innerHTML = `${nameOf(a)}<small>${where}</small>`;
-    row.onclick = () => openAgent(a);
-    box.appendChild(row);
-  }
-  if (live.length > 12) box.insertAdjacentHTML('beforeend', `<div class="empty">ほか ${live.length - 12}人</div>`);
-}
 function renderSuspects(){
   const box = $('susList');
+  if (!DEMO) { box.innerHTML = '<div class="empty">計測タグでは攻撃者は映りません。アクセスログにつなぐと表示されます。</div>'; return; }
   $('susCount').textContent = suspects.length ? `${suspects.filter(s => !s.banned).length}件` : '';
   if (!suspects.length) { box.innerHTML = '<div class="empty">いまのところいません</div>'; return; }
   box.innerHTML = '';
@@ -707,6 +933,34 @@ function ban(s){
   if (selected === a) closePop();
   log(`${s.ip} を締め出しました（以後の接続を拒否）`);
   renderSuspects();
+}
+
+let kFilter = 'human';
+const iconCache = {};
+function agentIcon(a){
+  const s = a.kind === 'human' ? personSpr(a.src.color, a.returning ? RETURN_CLOTHES : CLOTHES, 0)
+    : a.kind === 'crawler' ? robotSpr('#a9bccf', '#3cf', 0) : a.kind === 'spam' ? robotSpr('#e5c34a', '#e33', 0) : hoodSpr(0);
+  const key = a.kind + (a.src ? a.src.color : '') + (a.returning ? 'r' : '');
+  return iconCache[key] ||= s.toDataURL();
+}
+function renderKobito(){
+  const live = agents.filter(a => !a.gone && (kFilter === 'human') === (a.kind === 'human'));
+  live.sort((p, q) => p.born - q.born);
+  $('kobitoCount').textContent = `${live.length}人`;
+  const now = simS();
+  const box = $('kobitoList');
+  if (!live.length) { box.innerHTML = '<div class="empty">いません</div>'; return; }
+  box.innerHTML = '';
+  for (const a of live.slice(0, 12)) {
+    const where = a.at ? `${a.at.name}を見ている` : a.state === 'leave' ? '帰るところ' : `${a.route[a.step]?.name ?? ''}へ移動中`;
+    const row = document.createElement('div');
+    row.className = 'krow' + (a === selected ? ' sel' : '') + (a.kind === 'attacker' ? ' bad' : '');
+    row.innerHTML = `<img src="${agentIcon(a)}" alt=""><span class="kn"></span><span>${a.kind === 'attacker' ? a.reqs + '回' : a.pageLog.length}</span><span>${fmt(now - a.born)}</span>`;
+    row.querySelector('.kn').innerHTML = `${esc(nameOf(a))}<small>${esc(where)}</small>`;
+    row.onclick = () => openAgent(a);
+    box.appendChild(row);
+  }
+  if (live.length > 12) box.insertAdjacentHTML('beforeend', `<div class="empty">ほか ${live.length - 12}人</div>`);
 }
 
 const tl = $('timeline'), tg = tl.getContext('2d');
@@ -766,41 +1020,42 @@ function openAgent(a, e){
 function fillAgentPop(){
   const a = selected;
   const kindLine = a.kind === 'human'
-    ? `${a.src.label} ・ ${a.mobile ? 'スマホ' : 'パソコン'} ・ ${a.returning ? 'また来た人' : 'はじめての人'}`
+    ? `${a.src.label} ・ ${a.device || (a.mobile ? 'スマホ' : 'パソコン')} ・ ${a.returning ? 'また来た人' : 'はじめての人'}`
     : a.kind === 'crawler' ? `検索・AIの自動巡回（人数に数えない）`
     : a.kind === 'spam' ? 'お問い合わせフォームへの自動送信' : `攻撃の疑い ・ ${a.tag}`;
   const nextH = a.route[a.step] && a.state !== 'leave' ? a.route[a.step] : null;
   const stayed = simS() - a.born;
-  const rows = numbersOf(a, stayed).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  const rows = numbersOf(a, stayed).map(([k, v]) => `<tr><td>${k}</td><td>${esc(v)}</td></tr>`).join('');
   // ページごとの滞在時間（見ている途中のページは現在までの時間）
   const durs = a.pageLog.map(p => ({h:p.h, d:p.dur ?? simS() - p.t, now:p.dur == null}));
   const maxD = Math.max(1, ...durs.map(p => p.d));
-  const pages = durs.map(p => `<div class="pl"><span class="pn">${p.h.name}${p.now ? ' <em>見ている</em>' : ''}</span><span class="pd">${fmt(p.d)}</span>
+  const pages = durs.map(p => `<div class="pl"><span class="pn">${esc(p.h.name)}${p.now ? ' <em>見ている</em>' : ''}</span><span class="pd">${fmt(p.d)}</span>
     <div class="pb" style="width:${(p.d / maxD * 100).toFixed(0)}%"></div></div>`).join('');
-  $('popBody').innerHTML = `<h4>${nameOf(a)}</h4><div class="meta">${kindLine}<br>${a.ip}</div>
+  $('popBody').innerHTML = `<h4>${esc(nameOf(a))}</h4><div class="meta">${esc(kindLine)}<br>${esc(a.ip)}</div>
     <table class="nums">${rows}</table>
     <div class="meta" style="margin:8px 0 3px">${a.kind === 'human' ? '見たページと滞在時間' : '訪れた場所'}</div>
-    <div class="pages">${pages || '<i>（移動中）</i>'}${a.state === 'walk' && nextH ? `<div class="pl next">→ ${nextH.name}へ移動中</div>` : ''}</div>
+    <div class="pages">${pages || '<i>（移動中）</i>'}${a.state === 'walk' && nextH ? `<div class="pl next">→ ${esc(nextH.name)}へ移動中</div>` : ''}</div>
     ${a.kind === 'attacker' && !a.suspect.banned ? '<button class="ban" id="popBan">この相手を締め出す</button>' : ''}`;
   const b = $('popBan'); if (b) b.onclick = () => ban(a.suspect);
 }
 function fmt(sec){
   sec = Math.max(0, Math.round(sec));
-  return sec < 60 ? `${sec}秒` : `${sec / 60 | 0}分${String(sec % 60).padStart(2, '0')}秒`;
+  return sec < 60 ? `${sec}秒` : sec < 3600 ? `${sec / 60 | 0}分${String(sec % 60).padStart(2, '0')}秒` : `${sec / 3600 | 0}時間${String((sec % 3600) / 60 | 0).padStart(2, '0')}分`;
 }
 function numbersOf(a, stayed){
   if (a.kind === 'human') {
     const done = a.pageLog.filter(p => p.dur != null);
     const avg = done.length ? done.reduce((s, p) => s + p.dur, 0) / done.length : null;
-    return [
+    const rows = [
       ['サイトにいる時間', fmt(stayed)],
       ['見たページ', `${a.pageLog.length}ページ`],
       ['1ページあたり', avg == null ? '—' : fmt(avg)],
       ['これまでの訪問', a.visits === 1 ? 'はじめて' : `${a.visits}回目`],
-      [a.src.key === 'search' ? '検索した言葉' : a.src.key === 'direct' ? '来る前の場所' : '来る前のサービス', a.referrer],
+      [a.src.key === 'search' ? '検索エンジン' : a.src.key === 'direct' ? '来る前の場所' : a.src.key === 'other' ? '来る前のサイト' : '来る前のサービス', a.referrer],
       ['端末', a.browser],
-      ['見つからないページ', `${a.notFound}回`],
     ];
+    if (!a.live) rows.push(['見つからないページ', `${a.notFound}回`]);
+    return rows;
   }
   if (a.kind === 'attacker') return [
     ['要求の回数', `${a.reqs}回`],
@@ -825,10 +1080,11 @@ function openHouse(h, e){
 function fillHousePop(){
   const h = selectedHouse;
   const next = Object.entries(h.next).sort((a, b) => b[1] - a[1]).slice(0, 3);
-  $('popBody').innerHTML = `<h4>${h.name}</h4><div class="meta">${h.path}</div>
+  const inside = h.titles ? `<div class="meta" style="margin:6px 0 2px">まとめているページ</div><div class="pages">${h.titles.map(t => `<div class="pl next">${esc(t)}</div>`).join('')}</div>` : '';
+  $('popBody').innerHTML = `<h4>${esc(h.name)}</h4><div class="meta">${esc(h.titles ? h.zone : h.paths[0])}</div>
     <table><tr><td>いま見ている人</td><td>${agents.filter(a => a.at === h && a.kind === 'human').length}</td></tr>
-    <tr><td>きょう見た人</td><td>${h.total}</td></tr></table>
-    ${next.length ? `<div class="meta" style="margin:6px 0 2px">次に行ったページ</div>${next.map(([n, c]) => `<div class="route"><span>${n}</span><i>${c}人</i></div>`).join('')}` : ''}`;
+    <tr><td>きょう見た回数</td><td>${h.total}</td></tr></table>
+    ${next.length ? `<div class="meta" style="margin:6px 0 2px">次に行ったページ</div>${next.map(([n, c]) => `<div class="route"><span>${esc(n)}</span><i>${c}人</i></div>`).join('')}` : ''}${inside}`;
 }
 function closePop(){ pop.style.display = 'none'; selected = null; selectedHouse = null; popKind = null; }
 $('popX').onclick = closePop;
@@ -836,10 +1092,21 @@ $('popX').onclick = closePop;
 // ===== 操作 =====
 function seg(id, fn){ $(id).querySelectorAll('button').forEach(b => b.onclick = () => { $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); fn(b); }); }
 seg('speedSeg', b => speed = +b.dataset.x);
-seg('kFilter', b => { kFilter = b.dataset.k; renderKobito(); });
 seg('skySeg', b => night = b.dataset.s === 'night');
+seg('kFilter', b => { kFilter = b.dataset.k; renderKobito(); });
 seg('viewSeg', b => { if (b.dataset.v !== 'town') { toast('この画面は次の段階で作ります'); setTimeout(() => $('viewSeg').firstElementChild.click(), 600); } });
 function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1600); }
+
+function askKey(msg){
+  $('gate').classList.add('on'); $('gateErr').textContent = msg || ''; $('gateKey').focus();
+}
+$('gateForm').onsubmit = e => {
+  e.preventDefault();
+  Live.key = $('gateKey').value.trim();
+  try { localStorage.setItem('dtm_key', Live.key); } catch { /* 保存できなくても今回は使える */ }
+  $('gate').classList.remove('on');
+  Live.start();
+};
 
 // 凡例とロゴ
 (function(){
@@ -848,6 +1115,7 @@ function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('
     [personSpr(SOURCES[1].color, CLOTHES, 0), '直接来た人'],
     [personSpr(SOURCES[2].color, CLOTHES, 0), 'AIチャットから'],
     [personSpr(SOURCES[3].color, CLOTHES, 0), 'SNSから'],
+    [personSpr(SOURCES[4].color, CLOTHES, 0), 'ほかのサイトから'],
     [personSpr(SOURCES[0].color, RETURN_CLOTHES, 0), 'また来た人（服）'],
     [robotSpr('#a9bccf', '#3cf', 0), 'クローラー'],
     [robotSpr('#e5c34a', '#e33', 0), '営業ロボット'],
@@ -861,23 +1129,25 @@ function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('
   $('logo').getContext('2d').drawImage(personSpr('#3b6fd6', CLOTHES, 0), 0, 0);
 })();
 
-// 最初から町に何人かいる状態にする
-for (let i = 0; i < 9; i++) {
-  const a = spawn('human');
-  stats.humans--; curHour().humans--;
-  const h = a.route[0], s = doorSpot(h, a);
-  a.x = s.x; a.y = s.y; a.wp = []; arrive(a); a.stayUntil = simS() + rand(1, 8);
-  a.born = a.pageLog[0].t = simS() - rand(5, 90);
+// ===== 起動 =====
+$('mode').textContent = DEMO ? 'デモ' : 'ライブ';
+$('mode').classList.toggle('live', !DEMO);
+if (DEMO) {
+  $('siteUrl').textContent = 'https://www.example.co.jp/';
+  Demo.init();
+} else {
+  // ライブでは早送りは使わない（再生機能は次の段階）
+  $('speedSeg').style.display = $('speedLbl').style.display = 'none';
+  layoutTown([]);
+  Live.key ? Live.start() : askKey();
 }
-for (let i = 0; i < 2; i++) { const a = spawn('crawler'); stats.bots--; const s = doorSpot(a.route[0]); a.x = s.x; a.y = s.y; a.wp = []; }
-log('監視をはじめました（デモデータで動いています）');
 
 resize();
 let last = performance.now(), sideT = 0;
 function loop(t){
   const real = Math.min(.1, (t - last) / 1000); last = t;
-  const dt = real * speed;
-  simMs += dt * 1000;
+  const dt = real * (DEMO ? speed : 1);
+  if (DEMO) simMs += dt * 1000; else simMs = Date.now();
   update(dt); render();
   sideT += real;
   if (sideT > .5) { sideT = 0; renderSide(); if (popKind === 'agent' && selected) fillAgentPop(); if (popKind === 'house') fillHousePop(); }

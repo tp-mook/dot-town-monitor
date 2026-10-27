@@ -1,0 +1,15 @@
+{
+  "id": "vision-marketing",
+  "name": "ビジョンマーケティング",
+  "origin": "https://www.vision-marketing.co.jp",
+  "top": "/",
+  "formPaths": ["/お問い合わせ"],
+  "zones": [
+    {"name": "ブログ", "match": ["/blog", "/blog/*", "/post/*"]},
+    {"name": "実績", "match": ["/projects", "/projects/*"]},
+    {"name": "LEDビジョン", "match": ["/屋外用ledビジョン", "/屋外用ledポスター", "/ledビジョン販売", "/eyevision"]},
+    {"name": "お問い合わせ", "match": ["/お問い合わせ", "/サポート"]},
+    {"name": "事業", "match": ["/dx推進事業"]},
+    {"name": "会社・その他", "match": ["/会社概要", "/news", "/news/*", "/プライバシーポリシー"], "other": true}
+  ]
+}

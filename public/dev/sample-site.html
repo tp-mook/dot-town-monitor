@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>トップ | 計測タグ確認用のサイト</title>
+<style>
+body{font-family:sans-serif;max-width:640px;margin:24px auto;padding:0 16px;line-height:1.7}
+nav a{margin-right:12px}
+form{margin-top:16px;display:none}
+</style>
+</head>
+<body>
+<p>計測タグ（/t.js）の動きを確かめるためのページです。リンクは Wix と同じく、読み込み直さずに URL だけを切り替えます。</p>
+<nav>
+  <a href="/">トップ</a>
+  <a href="/会社概要">会社概要</a>
+  <a href="/ledビジョン販売">LEDビジョン販売</a>
+  <a href="/blog">ブログ</a>
+  <a href="/お問い合わせ">お問い合わせ</a>
+</nav>
+<h1 id="h"></h1>
+<form id="f"><input placeholder="お名前"> <button type="button">送信する</button></form>
+<script>
+  const show = p => {
+    const name = p === '/' ? 'トップ' : decodeURIComponent(p).slice(1);
+    document.title = name + ' | 計測タグ確認用のサイト';
+    document.getElementById('h').textContent = name;
+    document.getElementById('f').style.display = name === 'お問い合わせ' ? 'block' : 'none';
+  };
+  document.querySelector('nav').addEventListener('click', e => {
+    if (e.target.tagName !== 'A') return;
+    e.preventDefault();
+    const p = e.target.getAttribute('href');
+    history.pushState(null, '', p);
+    show(p);
+  });
+  addEventListener('popstate', () => show(location.pathname));
+  // 読み込み直すと404になるので、確認は最初の表示から続けて操作する
+  history.replaceState(null, '', '/');
+  show('/');
+</script>
+<script src="/t.js" async></script>
+</body>
+</html>
