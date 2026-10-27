@@ -1,0 +1,890 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ドット町モニター（UI試作）</title>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#efe9d8; --panel:#fffdf6; --ink:#2b2118; --muted:#7a6e5d; --line:#d8cfb8;
+  --accent:#3a7d44; --danger:#c8402f; --chip:#f1ead6; --grass:#7cbf55;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;font-size:13px}
+.dot{font-family:"DotGothic16",monospace}
+.app{display:grid;grid-template-rows:auto 1fr auto;height:100vh}
+
+header{display:flex;align-items:center;gap:14px;padding:8px 14px;background:var(--panel);border-bottom:3px solid var(--ink)}
+.logo{display:flex;align-items:center;gap:8px}
+.logo canvas{width:27px;height:36px;image-rendering:pixelated}
+.logo .name{font-size:19px;line-height:1.1}
+.logo .site{color:var(--muted);font-size:11px}
+.now{margin:0 auto;display:flex;align-items:baseline;gap:6px;font-size:14px}
+.now b{font-size:34px;line-height:1;color:var(--accent)}
+.now .sub{color:var(--muted);font-size:12px;margin-left:8px}
+.clock{font-size:22px}
+.date{color:var(--muted);font-size:12px;margin-right:4px}
+.seg{display:flex;border:2px solid var(--ink);border-radius:6px;overflow:hidden}
+.seg button{border:0;background:var(--panel);padding:5px 10px;font:inherit;cursor:pointer;color:var(--ink)}
+.seg button+button{border-left:2px solid var(--ink)}
+.seg button.on{background:var(--ink);color:#fff}
+
+main{display:grid;grid-template-columns:1fr 310px;min-height:0}
+#stageWrap{position:relative;min-height:0;background:var(--grass);overflow:hidden}
+#stage{position:absolute;inset:0;width:100%;height:100%;display:block}
+aside{border-left:3px solid var(--ink);background:var(--panel);overflow:auto;padding:10px 12px 20px}
+aside h3{font-family:"DotGothic16";font-weight:normal;font-size:14px;margin:14px 0 6px;display:flex;justify-content:space-between;align-items:baseline}
+aside h3:first-child{margin-top:2px}
+aside h3 small{font-family:inherit;color:var(--muted);font-size:11px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.stat{background:var(--chip);border-radius:6px;padding:6px 8px}
+.stat .k{font-size:11px;color:var(--muted)}
+.stat .v{font-family:"DotGothic16";font-size:20px}
+.stat.warn .v{color:var(--danger)}
+ol.rank{margin:0;padding:0;list-style:none}
+ol.rank li{display:flex;gap:6px;align-items:center;padding:3px 0;border-bottom:1px dashed var(--line)}
+ol.rank .n{font-family:"DotGothic16";width:16px;color:var(--muted)}
+ol.rank .t{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ol.rank .c{font-family:"DotGothic16"}
+.bar{height:4px;background:var(--accent);border-radius:2px;margin-top:2px}
+.sus{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.sus .tag{font-size:11px;padding:1px 6px;border-radius:3px;background:#f6d9d3;color:var(--danger);font-weight:bold;white-space:nowrap}
+.sus .tag.urgent{background:var(--danger);color:#fff}
+.sus .ip{flex:1;font-family:"DotGothic16";font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sus .ip small{display:block;font-family:inherit;color:var(--muted);font-size:10px}
+.sus button{border:2px solid var(--danger);background:#fff;color:var(--danger);border-radius:4px;font:inherit;font-size:11px;padding:2px 6px;cursor:pointer}
+.sus button:hover{background:var(--danger);color:#fff}
+.sus.banned{opacity:.45}
+.sus.banned button{display:none}
+.empty{color:var(--muted);font-size:12px;padding:4px 0}
+.kfilter{display:flex;gap:4px;margin-bottom:4px}
+.kfilter button{border:2px solid var(--ink);background:var(--panel);border-radius:4px;font:inherit;font-size:11px;padding:1px 8px;cursor:pointer}
+.kfilter button.on{background:var(--ink);color:#fff}
+.khead,.krow{display:grid;grid-template-columns:20px 1fr 46px 54px;gap:6px;align-items:center}
+.khead{font-size:10px;color:var(--muted);border-bottom:1px solid var(--line);padding-bottom:2px}
+.khead span:nth-child(n+3),.krow span:nth-child(n+3){text-align:right}
+.krow{padding:3px 2px;border-bottom:1px dashed var(--line);cursor:pointer;font-size:12px}
+.krow:hover{background:var(--chip)}
+.krow.sel{background:#fff3b0}
+.krow img{width:12px;height:16px;image-rendering:pixelated}
+.krow .kn{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.krow .kn small{display:block;color:var(--muted);font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.krow span:nth-child(n+3){font-family:"DotGothic16"}
+.krow.bad .kn{color:var(--danger)}
+.legend{display:grid;grid-template-columns:1fr 1fr;gap:4px 8px}
+.legend div{display:flex;align-items:center;gap:6px;font-size:11.5px}
+.legend canvas{width:18px;height:24px;image-rendering:pixelated;flex:none}
+ul.log{list-style:none;margin:0;padding:0;font-size:12px}
+ul.log li{padding:3px 0;border-bottom:1px dashed var(--line);display:flex;gap:6px}
+ul.log time{font-family:"DotGothic16";color:var(--muted);flex:none}
+ul.log li.bad{color:var(--danger)}
+ul.log li.new{animation:flash 1.2s}
+@keyframes flash{from{background:#fff3b0}to{background:transparent}}
+
+footer{display:flex;align-items:center;gap:12px;padding:6px 14px;background:var(--panel);border-top:3px solid var(--ink)}
+footer .lbl{font-size:12px;color:var(--muted)}
+#timeline{flex:1;height:38px;min-width:120px}
+
+.pop{position:absolute;z-index:5;min-width:210px;max-width:270px;background:var(--panel);border:3px solid var(--ink);border-radius:6px;
+  padding:8px 10px;box-shadow:4px 4px 0 rgba(0,0,0,.25);font-size:12px;display:none}
+.pop h4{margin:0 0 4px;font-family:"DotGothic16";font-weight:normal;font-size:15px}
+.pop .meta{color:var(--muted);margin-bottom:6px}
+.pop .route{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.pop .route span{background:var(--chip);border-radius:3px;padding:1px 5px}
+.pop .route i{font-style:normal;color:var(--muted)}
+.pop table{border-collapse:collapse;width:100%}
+.pop td{padding:2px 0}
+.pop td:last-child{text-align:right;font-family:"DotGothic16"}
+.pop{max-width:300px;min-width:240px;max-height:calc(100% - 12px);overflow:auto}
+.pop table.nums td{border-bottom:1px dashed var(--line);padding:3px 0}
+.pop table.nums td:first-child{color:var(--muted);padding-right:10px;white-space:nowrap}
+.pop table.nums td:last-child{font-family:inherit;font-weight:bold}
+.pop .pages{max-height:150px;overflow:auto}
+.pop .pl{display:grid;grid-template-columns:1fr auto;gap:0 8px;padding:2px 0}
+.pop .pl em{font-style:normal;font-size:10px;background:var(--accent);color:#fff;border-radius:3px;padding:0 4px}
+.pop .pd{font-family:"DotGothic16"}
+.pop .pb{grid-column:1/3;height:3px;background:#8dbf7a;border-radius:2px}
+.pop .pl.next{display:block;color:var(--muted)}
+.pop .x{position:absolute;right:6px;top:2px;cursor:pointer;color:var(--muted);font-size:16px}
+.pop .ban{margin-top:6px;width:100%;border:2px solid var(--danger);background:var(--danger);color:#fff;border-radius:4px;padding:4px;font:inherit;cursor:pointer}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:8px 14px;border-radius:6px;
+  font-family:"DotGothic16";opacity:0;transition:opacity .3s;pointer-events:none;z-index:9}
+.toast.on{opacity:1}
+
+@media (max-width:900px){
+  .app{height:auto}
+  header{flex-wrap:wrap}
+  .now{order:3;width:100%;justify-content:center}
+  main{grid-template-columns:1fr}
+  #stageWrap{height:58vw;min-height:260px}
+  aside{border-left:0;border-top:3px solid var(--ink)}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">
+      <canvas id="logo" width="9" height="12"></canvas>
+      <div><div class="name dot">ドット町モニター</div><div class="site">https://www.example.co.jp/</div></div>
+    </div>
+    <div class="now dot">いま <b id="nowCount">0</b> 人が見ています<span class="sub" id="nowRobots">ロボット 0</span></div>
+    <div class="date" id="date"></div>
+    <div class="clock dot" id="clock">--:--</div>
+    <div class="seg" id="viewSeg"><button class="on" data-v="town">町</button><button data-v="board">掲示板</button><button data-v="settings">設定</button></div>
+    <div class="seg" id="skySeg"><button class="on" data-s="day">昼</button><button data-s="night">夜</button></div>
+  </header>
+
+  <main>
+    <div id="stageWrap">
+      <canvas id="stage"></canvas>
+      <div class="pop" id="pop"><span class="x" id="popX">×</span><div id="popBody"></div></div>
+    </div>
+    <aside>
+      <h3>きょうのまとめ <small id="sumDate"></small></h3>
+      <div class="stats">
+        <div class="stat"><div class="k">来た人</div><div class="v" id="sHumans">0</div></div>
+        <div class="stat"><div class="k">見られたページ</div><div class="v" id="sViews">0</div></div>
+        <div class="stat"><div class="k">ロボット</div><div class="v" id="sBots">0</div></div>
+        <div class="stat warn"><div class="k">攻撃の疑い</div><div class="v" id="sAttacks">0</div></div>
+      </div>
+
+      <h3>人気のページ <small>きょう</small></h3>
+      <ol class="rank" id="rank"></ol>
+
+      <h3>要注意の相手 <small id="susCount"></small></h3>
+      <div id="susList"><div class="empty">いまのところいません</div></div>
+
+      <h3>いまいる小人 <small id="kobitoCount"></small></h3>
+      <div class="kfilter" id="kFilter"><button class="on" data-k="human">人</button><button data-k="bot">ロボット・要注意</button></div>
+      <div class="khead"><span></span><span>名前</span><span>ページ</span><span>滞在</span></div>
+      <div id="kobitoList"></div>
+
+      <h3>小人の見かた</h3>
+      <div class="legend" id="legend"></div>
+
+      <h3>できごと</h3>
+      <ul class="log" id="log"></ul>
+    </aside>
+  </main>
+
+  <footer>
+    <span class="lbl">再生</span>
+    <div class="seg" id="speedSeg"><button class="on" data-x="1">等速</button><button data-x="3">3倍</button><button data-x="10">10倍</button></div>
+    <canvas id="timeline"></canvas>
+    <div class="seg"><button class="on">きょう</button><button>7日</button><button>期間</button></div>
+  </footer>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== 町の大きさ（ドット単位） =====
+const W = 480, H = 270;
+const $ = id => document.getElementById(id);
+const R = Math.random;
+const pick = a => a[Math.floor(R() * a.length)];
+const rand = (a, b) => a + R() * (b - a);
+function seeded(s){ return () => (s = (s * 1664525 + 1013904223) >>> 0) / 4294967296; }
+
+// ===== ドット絵スプライト =====
+function spr(rows, pal){
+  const c = document.createElement('canvas');
+  c.width = rows[0].length; c.height = rows.length;
+  const x = c.getContext('2d');
+  rows.forEach((r, j) => [...r].forEach((ch, i) => {
+    if (ch !== '.' && pal[ch]) { x.fillStyle = pal[ch]; x.fillRect(i, j, 1, 1); }
+  }));
+  return c;
+}
+const INK = '#2b2118';
+const PERSON = ["....k....","...khk...","...khk...","..khhhk..",".khhhhhk.","kkkkkkkkk","..ksssk..","..kesek..","..ksssk..",".kccccck.",".kccccck."];
+const LEGS = ["..kk.kk..",".kk...kk."];
+const ROBOT = ["....r....","....k....",".kkkkkkk.",".kgggggk.",".kgcgcgk.",".kgggggk.",".kkkkkkk.","..kgggk..",".kgggggk.",".kgggggk."];
+const HOOD = ["...kkk...","..krrrk..",".krrrrrk.",".krdddrk.",".krydyrk.",".krdddrk.","kkrrrrrkk","krrrrrrrk",".krrrrrk.",".krrrrrk.",".kkkkkkk."];
+const ENVELOPE = ["kkkkkkk","kkwwwkk","kwkwkwk","kwwkwwk","kkkkkkk"];
+const TREE = ["...kkkkk...","..kGGgggk..",".kGGggggdk.","kGgggggggdk","kggggggggdk","kgggggggddk",".kgggggddk.","..kkdddkk..","....kbk....","....kbk....","...kkbkk..."];
+const HOUSE = ["......kkkk......",".....kRRRRk.....","....kRRRRRRk....","...kRRRRRRRRk...","..kRRRRRRRRRRk..",".kRRRRRRRRRRRRk.","kkkkkkkkkkkkkkkk",".kwwwwwwwwwwwwk.",".kwbbwwwwwwbbwk.",".kwbbwwkkwwbbwk.",".kwwwwkddkwwwwk.",".kwwwwkddkwwwwk.",".kwwwwkddkwwwwk.",".kkkkkkkkkkkkkk."];
+const MAILBOX = [".kkk.","kRRRk","kRwRk","kRRRk",".kbk.",".kbk.",".kbk."];
+
+const sprCache = {};
+function personSpr(hat, clothes, f){
+  const key = hat + clothes + f;
+  return sprCache[key] ||= spr([...PERSON, LEGS[f]], {k:INK, h:hat, s:'#f6c9a0', e:INK, c:clothes});
+}
+function robotSpr(body, eye, f){
+  const key = 'r' + body + f;
+  return sprCache[key] ||= spr([...ROBOT, LEGS[f]], {k:INK, g:body, c:eye, r:'#e33'});
+}
+function hoodSpr(f){
+  return sprCache['hood' + f] ||= spr([...HOOD, LEGS[f]], {k:INK, r:'#c8302a', d:'#3a1a1a', y:'#ffe14a'});
+}
+const envSpr = spr(ENVELOPE, {k:INK, w:'#fff'});
+const treeSpr = spr(TREE, {k:'#264020', G:'#9be070', g:'#5aa83c', d:'#3d7d2a', b:'#7a4a24'});
+const houseSpr = roof => sprCache['h' + roof] ||= spr(HOUSE, {k:INK, R:roof, w:'#f7efd9', b:'#7ec8f0', d:'#8a5a2b'});
+const mailSpr = spr(MAILBOX, {k:INK, R:'#d9443a', w:'#fff', b:'#6b4a2a'});
+
+// 来訪元（帽子の色）
+const SOURCES = [
+  {key:'search', label:'検索から',      color:'#3b6fd6', w:5},
+  {key:'direct', label:'直接・ブックマーク', color:'#3aa04a', w:2},
+  {key:'ai',     label:'AIチャットから',  color:'#9b59d0', w:1.5},
+  {key:'sns',    label:'SNSから',       color:'#e8a33a', w:1},
+];
+const CLOTHES = '#f4f1e8', RETURN_CLOTHES = '#f08a3c';
+
+// ===== 町のつくり =====
+const ZONES = [
+  {name:'会社案内',   x:8,   y:58,  w:104, h:84},
+  {name:'ブログ',     x:130, y:58,  w:222, h:84},
+  {name:'お問い合わせ', x:370, y:58,  w:102, h:84},
+  {name:'採用',       x:8,   y:164, w:104, h:98},
+  {name:'サービス',   x:130, y:164, w:222, h:98},
+  {name:'管理画面',   x:370, y:164, w:102, h:50, fence:true},
+];
+const ROOFS = ['#d9534f','#4a7fd4','#e38b2c','#5aa65a','#8e5cc4','#3aa0a0'];
+let hid = 0;
+const H_ = (name, path, x, y, opt={}) => ({id:hid++, name, path, x, y, type:'house', roof:ROOFS[hid % ROOFS.length],
+  w:16, h:14, door:{x:x+8, y:y+15}, viewers:0, total:0, next:{}, ...opt});
+const HOUSES = [
+  H_('トップページ', '/', 225, 8, {type:'mansion', w:30, h:28, door:{x:240, y:37}}),
+  H_('会社概要', '/company/', 22, 76), H_('代表あいさつ', '/company/message', 70, 76),
+  H_('アクセス', '/company/access', 22, 114), H_('沿革', '/company/history', 70, 114),
+  H_('ブログ一覧', '/blog/', 146, 76), H_('生成AI活用術', '/blog/ai-tips', 198, 76),
+  H_('補助金まとめ', '/blog/subsidy', 250, 76), H_('導入事例A社', '/blog/case-a', 302, 76),
+  H_('DX入門', '/blog/dx', 146, 114), H_('社長日記', '/blog/diary', 198, 114),
+  H_('Excel自動化', '/blog/excel', 250, 114), H_('セミナー報告', '/blog/seminar', 302, 114),
+  H_('お問い合わせ', '/contact/', 384, 76, {type:'form', roof:'#d9443a'}),
+  H_('予約CGI', '/cgi-bin/reserve.cgi', 436, 76, {type:'cgi', roof:'#7d7d86'}),
+  H_('資料ダウンロード', '/download/', 410, 114),
+  H_('採用情報', '/recruit/', 22, 180), H_('募集要項', '/recruit/jobs', 70, 180), H_('社員の声', '/recruit/voice', 46, 220),
+  H_('サービス一覧', '/service/', 146, 180), H_('AI研修', '/service/ai-training', 198, 180),
+  H_('DX支援', '/service/dx', 250, 180), H_('Web制作', '/service/web', 302, 180),
+  H_('業務改善', '/service/kaizen', 172, 220), H_('料金', '/service/price', 276, 220),
+  H_('ログイン画面', '/wp-login.php', 412, 182, {type:'admin', roof:'#4a4a55'}),
+  H_('迷子の穴', '（存在しないページ）', 396, 230, {type:'pit', w:24, h:12, door:{x:408, y:244}}),
+];
+const byType = t => HOUSES.find(h => h.type === t);
+const TOP = byType('mansion'), FORM = byType('form'), ADMIN = byType('admin'), PIT = byType('pit');
+const PAGES = HOUSES.filter(h => !['admin','pit','cgi'].includes(h.type));
+const GATE = {x:6, y:6, door:{x:19, y:32}};
+const ROADS = [
+  {x:0, y:44, w:W, h:7}, {x:0, y:148, w:W, h:8},
+  {x:117, y:44, w:8, h:H-44}, {x:358, y:44, w:8, h:H-44}, {x:237, y:34, w:6, h:12},
+  {x:16, y:28, w:6, h:18},
+];
+const roadY = y => y < 100 ? 47 : 152;
+function route(a, b){
+  const ra = roadY(a.y), rb = roadY(b.y);
+  if (ra === rb) return [{x:a.x, y:ra}, {x:b.x, y:ra}, {x:b.x, y:b.y}];
+  const vx = Math.abs((a.x + b.x) / 2 - 121) < Math.abs((a.x + b.x) / 2 - 362) ? 121 : 362;
+  return [{x:a.x, y:ra}, {x:vx, y:ra}, {x:vx, y:rb}, {x:b.x, y:rb}, {x:b.x, y:b.y}];
+}
+
+// ===== 背景（静止部分）を一度だけ描く =====
+const bg = document.createElement('canvas'); bg.width = W; bg.height = H;
+const TREES = [];
+(function drawBackground(){
+  const g = bg.getContext('2d'), r = seeded(7);
+  g.fillStyle = '#7cbf55'; g.fillRect(0, 0, W, H);
+  for (let i = 0; i < 2600; i++) { g.fillStyle = r() < .5 ? '#6fb04a' : '#8acb62'; g.fillRect(r()*W|0, r()*H|0, 1, 1); }
+  for (const z of ZONES) {
+    g.fillStyle = '#9fd47c'; g.fillRect(z.x, z.y, z.w, z.h);
+    g.fillStyle = '#5c9a3e';
+    g.fillRect(z.x, z.y, z.w, 1); g.fillRect(z.x, z.y + z.h - 1, z.w, 1);
+    g.fillRect(z.x, z.y, 1, z.h); g.fillRect(z.x + z.w - 1, z.y, 1, z.h);
+    if (z.fence) {
+      g.fillStyle = '#8a5a2b';
+      for (let x = z.x; x < z.x + z.w; x += 3) { g.fillRect(x, z.y - 2, 1, 4); g.fillRect(x, z.y + z.h - 2, 1, 4); }
+      for (let y = z.y; y < z.y + z.h; y += 3) { g.fillRect(z.x - 1, y, 3, 1); g.fillRect(z.x + z.w - 2, y, 3, 1); }
+    }
+  }
+  for (const rd of ROADS) {
+    g.fillStyle = '#e6d3a1'; g.fillRect(rd.x, rd.y, rd.w, rd.h);
+    g.fillStyle = '#d6bf86';
+    for (let i = 0; i < rd.w * rd.h / 14; i++) g.fillRect(rd.x + r()*rd.w|0, rd.y + r()*rd.h|0, 1, 1);
+  }
+  // 花
+  for (let i = 0; i < 140; i++) {
+    const x = r()*W|0, y = r()*H|0;
+    if (blocked(x, y, 1)) continue;
+    g.fillStyle = ['#fff','#ffd84a','#ff7a8a'][i % 3]; g.fillRect(x, y, 1, 1);
+  }
+  // 木
+  const tr = seeded(42);
+  for (let i = 0; i < 400; i++) {
+    const x = tr()*(W-11)|0, y = tr()*(H-11)|0;
+    if (blocked(x, y, 11, 11)) continue;
+    g.drawImage(treeSpr, x, y);
+    TREES.push({x, y});
+  }
+  // 入口の門
+  const gx = GATE.x, gy = GATE.y;
+  g.fillStyle = INK; g.fillRect(gx, gy + 3, 26, 5); g.fillStyle = '#b0503a'; g.fillRect(gx + 1, gy + 4, 24, 3);
+  for (const px of [gx + 2, gx + 20]) { g.fillStyle = INK; g.fillRect(px, gy + 8, 4, 16); g.fillStyle = '#a9a39a'; g.fillRect(px + 1, gy + 8, 2, 15); }
+  // 家
+  for (const h of HOUSES) {
+    if (h.type === 'mansion') drawMansion(g, h.x, h.y);
+    else if (h.type === 'pit') drawPit(g, h.x, h.y);
+    else {
+      g.drawImage(houseSpr(h.roof), h.x, h.y);
+      if (h.type === 'cgi') { g.fillStyle = INK; g.fillRect(h.x + 11, h.y - 1, 3, 5); g.fillStyle = '#9a9aa2'; g.fillRect(h.x + 12, h.y, 1, 4); }
+      if (h.type === 'form') g.drawImage(mailSpr, h.x + 17, h.y + 7);
+      if (h.type === 'admin') { g.fillStyle = '#ffd84a'; g.fillRect(h.x + 7, h.y + 3, 2, 2); }
+    }
+  }
+})();
+function blocked(x, y, w = 1, h = 1){
+  const hit = (r, m = 0) => x < r.x + r.w + m && x + w > r.x - m && y < r.y + r.h + m && y + h > r.y - m;
+  return ZONES.some(z => hit(z, 3)) || ROADS.some(rd => hit(rd, 1))
+    || hit({x:GATE.x, y:GATE.y, w:26, h:26}, 2) || hit({x:TOP.x, y:TOP.y, w:30, h:30}, 4)
+    || hit({x:PIT.x, y:PIT.y, w:24, h:12}, 6) || y < 2;
+}
+function drawMansion(g, x, y){
+  g.fillStyle = INK; g.fillRect(x + 14, y, 1, 9);
+  g.fillStyle = '#e8443a'; g.fillRect(x + 15, y, 6, 4); g.fillStyle = INK; g.fillRect(x + 21, y, 1, 4); g.fillRect(x + 15, y + 4, 7, 0);
+  for (let i = 0; i < 9; i++) {
+    const half = 2 + i * 1.6 | 0, cy = y + 7 + i;
+    g.fillStyle = INK; g.fillRect(x + 15 - half, cy, half * 2, 1);
+    g.fillStyle = i % 3 === 2 ? '#b8332c' : '#d9443a'; g.fillRect(x + 16 - half, cy, half * 2 - 2, 1);
+  }
+  g.fillStyle = INK; g.fillRect(x, y + 16, 30, 1); g.fillRect(x + 1, y + 16, 1, 12); g.fillRect(x + 28, y + 16, 1, 12); g.fillRect(x + 1, y + 27, 28, 1);
+  g.fillStyle = '#fbf3df'; g.fillRect(x + 2, y + 17, 26, 10);
+  g.fillStyle = '#7ec8f0';
+  for (const wx of [4, 9, 18, 23]) { g.fillRect(x + wx, y + 19, 3, 3); g.fillRect(x + wx, y + 23, 3, 2); }
+  g.fillStyle = INK; g.fillRect(x + 13, y + 20, 4, 7); g.fillStyle = '#8a5a2b'; g.fillRect(x + 14, y + 21, 2, 6);
+}
+function drawPit(g, x, y){
+  for (let j = 0; j < 12; j++) {
+    const half = Math.round(12 * Math.sqrt(1 - ((j - 5.5) / 6) ** 2));
+    g.fillStyle = '#6b4a2a'; g.fillRect(x + 12 - half, y + j, half * 2, 1);
+    const inner = half - 2;
+    if (inner > 0 && j > 0 && j < 11) { g.fillStyle = j < 4 ? '#2a1d14' : '#120c08'; g.fillRect(x + 12 - inner, y + j, inner * 2, 1); }
+  }
+  g.fillStyle = '#7a4a24'; g.fillRect(x + 26, y - 6, 1, 10);
+  g.fillStyle = INK; g.fillRect(x + 23, y - 9, 8, 6); g.fillStyle = '#f7efd9'; g.fillRect(x + 24, y - 8, 6, 4);
+  g.fillStyle = '#c8302a'; g.fillRect(x + 26, y - 7, 2, 1); g.fillRect(x + 27, y - 6, 1, 1); g.fillRect(x + 26, y - 5, 1, 0);
+}
+
+// ===== 状態 =====
+let speed = 1, night = false;
+let simMs = Date.now();
+const simS = () => simMs / 1000;
+const agents = [], foots = [], puffs = [];
+let agentSeq = 180, selected = null, selectedHouse = null;
+const stats = {humans:118, views:342, bots:57, attacks:3};
+const hourly = Array.from({length:24}, (_, h) => {
+  const cur = new Date(simMs).getHours();
+  if (h > cur) return null;
+  const base = Math.max(0, Math.sin((h - 6) / 15 * Math.PI)) * 14 + (h >= 9 && h <= 18 ? 6 : 0);
+  return {humans: Math.round(base + R() * 5), bots: Math.round(4 + R() * 6)};
+});
+const suspects = [];
+HOUSES.forEach(h => { if (h.type !== 'pit' && h.type !== 'admin') h.total = Math.round(R() * 14 + (h === TOP ? 60 : h.path.startsWith('/blog') ? 12 : 4)); });
+byType('mansion').total = 74;
+HOUSES.find(h => h.path === '/blog/ai-tips').total = 41;
+
+const ip = () => pick(['203.0.113.','198.51.100.','192.0.2.']) + (R() * 250 + 2 | 0);
+
+function weightedSource(){
+  const t = SOURCES.reduce((s, x) => s + x.w, 0); let v = R() * t;
+  return SOURCES.find(s => (v -= s.w) < 0) || SOURCES[0];
+}
+function humanRoute(src){
+  const first = src.key === 'direct' ? TOP
+    : src.key === 'ai' ? pick(PAGES.filter(p => p.path.startsWith('/service') || p.path.startsWith('/blog')))
+    : src.key === 'sns' ? pick(PAGES.filter(p => p.path.startsWith('/blog/')))
+    : pick(PAGES);
+  const r = [first];
+  const n = 1 + (R() * 4 | 0);
+  for (let i = 0; i < n; i++) {
+    const cur = r[r.length - 1];
+    let nx;
+    const v = R();
+    if (v < .06) nx = PIT;
+    else if (v < .16) nx = FORM;
+    else if (v < .36) nx = TOP;
+    else {
+      const prefix = cur.path.split('/')[1];
+      const same = PAGES.filter(p => p !== cur && p.path.split('/')[1] === prefix);
+      nx = same.length && R() < .6 ? pick(same) : pick(PAGES);
+    }
+    if (nx !== cur) r.push(nx);
+    if (nx === PIT || nx === FORM) break;
+  }
+  return r;
+}
+
+function spawn(kind, opts = {}){
+  const a = {id: ++agentSeq, kind, x:GATE.door.x, y:GATE.door.y, wp:[], state:'walk', step:0, history:[], f:0, ft:0,
+    walked:0, lastFoot:0, ip:ip(), born:simS(), pageLog:[], reqs:0, notFound:0, ...opts};
+  if (kind === 'human') {
+    a.src = weightedSource(); a.returning = R() < .25; a.spd = rand(16, 22);
+    a.mobile = R() < .55; a.route = humanRoute(a.src);
+    a.visits = a.returning ? 2 + (R() * 7 | 0) : 1;
+    a.browser = a.mobile ? pick(['iPhone Safari','Android Chrome']) : pick(['Windows Chrome','Windows Edge','Mac Safari']);
+    a.referrer = {search: pick(['「AI研修 中小企業」','「補助金 DX」','「Excel 自動化 方法」','「会社名」']),
+      direct: 'なし（ブックマーク・URL直接）', ai: pick(['ChatGPT','Claude','Perplexity','Gemini']), sns: pick(['X','Facebook','Instagram'])}[a.src.key];
+    stats.humans++; curHour().humans++;
+  } else if (kind === 'crawler') {
+    a.spd = 34; a.bot = pick(['Googlebot','Bingbot','GPTBot','ClaudeBot','PerplexityBot']);
+    a.route = Array.from({length: 4 + (R() * 4 | 0)}, () => pick(PAGES));
+    stats.bots++; curHour().bots++;
+  } else if (kind === 'spam') {
+    a.spd = 30; a.route = [TOP, FORM]; a.letter = true; stats.bots++; curHour().bots++;
+  } else if (kind === 'attacker') {
+    a.spd = 42; a.route = [PIT, PIT, PIT, ADMIN, PIT, ADMIN, ADMIN]; a.tag = '下見';
+    a.uaNames = 1; a.loginTries = 0;
+    stats.attacks++;
+    const s = {agent:a, ip:a.ip, tag:'下見', hits:0, banned:false, first:clock()};
+    suspects.unshift(s); a.suspect = s;
+    log(`攻撃の疑い：${a.ip} が来ました（存在しないページを探しています）`, true);
+    renderSuspects();
+  }
+  a.wp = route(a, doorSpot(a.route[0], a));
+  agents.push(a);
+  return a;
+}
+function doorSpot(h, a){
+  if (h.type === 'pit') return {x: h.door.x + rand(-6, 6) | 0, y: h.y + 6};
+  const spread = h.type === 'mansion' ? 12 : 8;
+  return {x: Math.round(h.door.x + rand(-spread, spread)), y: Math.round(h.door.y + rand(2, 6))};
+}
+
+function arrive(a){
+  const h = a.route[a.step];
+  a.at = h; h.viewers++; h.total += a.kind === 'human' ? 1 : 0;
+  a.history.push(h);
+  a.pageLog.push({h, t:simS(), dur:null});
+  if (a.kind === 'attacker') {
+    // 攻撃者は1か所で何回も要求を送る
+    const n = 3 + (R() * 9 | 0);
+    a.reqs += n;
+    if (h === PIT) a.notFound += n; else a.loginTries += n;
+    a.uaNames += R() * 3 | 0;
+  } else { a.reqs++; if (h === PIT) a.notFound++; }
+  if (a.kind === 'human') { stats.views++; if (h === PIT) log(`お客さん${a.id} がリンク切れで迷子の穴に落ちました`); else if (h === FORM) log(`お客さん${a.id} がお問い合わせフォームを開きました`); else if (R() < .35) log(`お客さん${a.id} が「${h.name}」を見ています`); }
+  if (a.kind === 'spam' && h === FORM) { a.letter = false; log(`フォーム営業ロボット(${a.ip})が手紙を投函しました`, true); }
+  if (a.kind === 'attacker') {
+    a.suspect.hits++;
+    if (h === ADMIN && a.tag !== '侵入?') {
+      a.tag = a.suspect.tag = '侵入?';
+      log(`【至急】${a.ip} がログイン画面で総当たりを試しています`, true);
+    }
+    renderSuspects();
+  }
+  const dur = a.kind === 'human' ? (h === PIT ? 1.5 : rand(3, 9)) : a.kind === 'attacker' ? .5 : a.kind === 'crawler' ? .6 : 2.5;
+  a.state = 'stay'; a.stayUntil = simS() + dur;
+}
+function depart(a){
+  const h = a.at; h.viewers--; a.at = null;
+  const pl = a.pageLog[a.pageLog.length - 1]; if (pl) pl.dur = simS() - pl.t;
+  const nx = a.route[a.step + 1];
+  if (nx && a.kind === 'human') h.next[nx.name] = (h.next[nx.name] || 0) + 1;
+  a.step++;
+  if (nx) { a.state = 'walk'; a.wp = route(a, doorSpot(nx, a)); }
+  else { a.state = 'leave'; a.wp = route(a, GATE.door); }
+}
+
+function update(dt){
+  // 出現（デモ用の頻度）
+  spawnClock.human -= dt; spawnClock.crawler -= dt; spawnClock.spam -= dt; spawnClock.attacker -= dt;
+  if (spawnClock.human <= 0) { spawn('human'); spawnClock.human = rand(1.2, 3.2); }
+  if (spawnClock.crawler <= 0) { spawn('crawler'); spawnClock.crawler = rand(6, 12); }
+  if (spawnClock.spam <= 0) { spawn('spam'); spawnClock.spam = rand(25, 45); }
+  if (spawnClock.attacker <= 0) { spawn('attacker'); spawnClock.attacker = rand(40, 70); }
+
+  const now = simS();
+  for (let i = agents.length - 1; i >= 0; i--) {
+    const a = agents[i];
+    if (a.gone) { if (now - a.gone > .8) agents.splice(i, 1); continue; }
+    if (a.state === 'stay') { if (now >= a.stayUntil) depart(a); continue; }
+    const t = a.wp[0];
+    if (!t) { if (a.state === 'leave') { agents.splice(i, 1); if (selected === a) closePop(); } else arrive(a); continue; }
+    const dx = t.x - a.x, dy = t.y - a.y, d = Math.hypot(dx, dy), st = a.spd * dt;
+    if (d <= st) { a.x = t.x; a.y = t.y; a.wp.shift(); } else { a.x += dx / d * st; a.y += dy / d * st; }
+    a.walked += Math.min(d, st);
+    a.ft += dt; if (a.ft > .16) { a.ft = 0; a.f ^= 1; }
+    if (a.kind === 'human' && a.walked - a.lastFoot >= 3) {
+      a.lastFoot = a.walked;
+      const side = (a.walked / 3 | 0) % 2 ? 1 : -1;
+      foots.push({x: Math.round(a.x + (Math.abs(dy) > Math.abs(dx) ? side : 0)), y: Math.round(a.y + (Math.abs(dx) >= Math.abs(dy) ? side : 0)), t: now});
+    }
+  }
+  while (foots.length && now - foots[0].t > 90) foots.shift();
+  if (foots.length > 5000) foots.splice(0, foots.length - 5000);
+  for (let i = puffs.length - 1; i >= 0; i--) if (now - puffs[i].t > 1.2) puffs.splice(i, 1);
+}
+const spawnClock = {human:0, crawler:3, spam:8, attacker:6};
+
+// ===== 描画 =====
+const cv = $('stage'), ctx = cv.getContext('2d');
+const world = document.createElement('canvas'); world.width = W; world.height = H;
+const wg = world.getContext('2d');
+let S = 2, ox = 0, oy = 0, dpr = 1;
+function resize(){
+  dpr = window.devicePixelRatio || 1;
+  const r = cv.getBoundingClientRect();
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  const fit = Math.min(cv.width / W, cv.height / H);
+  // 整数倍だと余白が大きくなりすぎるときは画面いっぱいに合わせる
+  S = Math.floor(fit) / fit > .88 ? Math.floor(fit) : fit;
+  ox = Math.round((cv.width - W * S) / 2); oy = Math.round((cv.height - H * S) / 2);
+}
+addEventListener('resize', resize);
+
+function drawWorld(){
+  const now = simS(), g = wg;
+  g.drawImage(bg, 0, 0);
+  // 足あと
+  for (const f of foots) {
+    const al = 1 - (now - f.t) / 90;
+    g.fillStyle = `rgba(92,62,30,${(.55 * al).toFixed(2)})`; g.fillRect(f.x, f.y, 1, 1);
+  }
+  // 工房の煙
+  const cgi = byType('cgi');
+  for (let i = 0; i < 3; i++) {
+    const p = ((now * .6 + i / 3) % 1);
+    g.fillStyle = `rgba(230,230,235,${(1 - p).toFixed(2)})`;
+    g.fillRect(cgi.x + 12 + Math.round(Math.sin(p * 6 + i) * 1.5), cgi.y - 2 - Math.round(p * 9), 2, 2);
+  }
+  // トップの旗をゆらす
+  if ((now * 2 | 0) % 2) { g.fillStyle = '#7cbf55'; g.fillRect(TOP.x + 20, TOP.y + 3, 1, 1); g.fillStyle = '#e8443a'; g.fillRect(TOP.x + 21, TOP.y + 1, 1, 2); }
+
+  const list = agents.slice().sort((p, q) => p.y - q.y);
+  for (const a of list) {
+    const x = Math.round(a.x - 4), y = Math.round(a.y - 11);
+    const f = a.state === 'walk' || a.state === 'leave' ? a.f : 0;
+    if (a === selected) { g.fillStyle = '#ffe14a'; g.fillRect(x - 1, y + 11, 11, 2); }
+    g.globalAlpha = a.gone ? Math.max(0, 1 - (now - a.gone) / .8) : a.kind === 'crawler' ? .55 : 1;
+    if (a.kind === 'human') g.drawImage(personSpr(a.src.color, a.returning ? RETURN_CLOTHES : CLOTHES, f), x, y);
+    else if (a.kind === 'crawler') g.drawImage(robotSpr('#a9bccf', '#3cf', f), x, y + 1);
+    else if (a.kind === 'spam') { g.drawImage(robotSpr('#e5c34a', '#e33', f), x, y + 1); if (a.letter) g.drawImage(envSpr, x + 6, y + 5); }
+    else if (a.kind === 'attacker') {
+      g.drawImage(hoodSpr(f), x, y);
+      if ((now * 3 | 0) % 2) { g.fillStyle = INK; g.fillRect(x + 3, y - 7, 3, 6); g.fillStyle = '#ffe14a'; g.fillRect(x + 4, y - 6, 1, 3); g.fillRect(x + 4, y - 2, 1, 1); }
+    }
+    g.globalAlpha = 1;
+  }
+  for (const p of puffs) {
+    const k = (now - p.t) / 1.2, r = 2 + k * 8;
+    g.fillStyle = `rgba(255,255,255,${(1 - k).toFixed(2)})`;
+    for (let i = 0; i < 8; i++) { const an = i / 8 * Math.PI * 2; g.fillRect(Math.round(p.x + Math.cos(an) * r), Math.round(p.y - 6 + Math.sin(an) * r * .6), 2, 2); }
+  }
+  if (night) {
+    g.fillStyle = 'rgba(16,24,70,.55)'; g.fillRect(0, 0, W, H);
+    g.fillStyle = '#ffe58a';
+    for (const h of HOUSES) if (h.viewers > 0 && h.type === 'house') { g.fillRect(h.x + 3, h.y + 8, 2, 2); g.fillRect(h.x + 11, h.y + 8, 2, 2); }
+    if (TOP.viewers > 0) for (const wx of [4, 9, 18, 23]) g.fillRect(TOP.x + wx, TOP.y + 19, 3, 3);
+  }
+}
+
+function label(text, x, y, opt = {}){
+  const fs = Math.round(Math.max(10 * dpr, Math.min(14 * dpr, S * 3.6)) * (opt.scale || 1));
+  ctx.font = `${opt.bold ? 'bold ' : ''}${fs}px "DotGothic16", sans-serif`;
+  ctx.textAlign = opt.align || 'center'; ctx.textBaseline = 'bottom';
+  ctx.lineJoin = 'round'; ctx.lineWidth = Math.max(2, fs / 4);
+  ctx.strokeStyle = opt.stroke || 'rgba(255,255,255,.92)'; ctx.strokeText(text, x, y);
+  ctx.fillStyle = opt.color || INK; ctx.fillText(text, x, y);
+  return fs;
+}
+function render(){
+  drawWorld();
+  ctx.fillStyle = night ? '#3a4e3a' : '#7cbf55'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(world, ox, oy, W * S, H * S);
+  const P = (x, y) => [ox + x * S, oy + y * S];
+  // 区画の名前
+  for (const z of ZONES) { const [x, y] = P(z.x + 3, z.y + 1); label(z.name, x, y, {align:'left', color:'#2f5a22', scale:.95}); }
+  { const [x, y] = P(GATE.x + 13, GATE.y + 3); label('入口', x, y, {bold:true}); }
+  // 家の名前と人数
+  for (const h of HOUSES) {
+    const [cx, ty] = P(h.x + h.w / 2, h.type === 'pit' ? h.y - 9 : h.y);
+    const fs = label(h.name, h.type === 'pit' ? cx - 8 * S : cx, ty - 2, {bold: h === TOP, color: h.type === 'admin' ? '#7a1f18' : INK, scale: h === TOP ? 1.15 : .92});
+    if (h === selectedHouse) {
+      const [x0, y0] = P(h.x - 2, h.y - 2);
+      ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 2 * dpr; ctx.setLineDash([4 * dpr, 3 * dpr]);
+      ctx.strokeRect(x0, y0, (h.w + 4) * S, (h.h + 4) * S); ctx.setLineDash([]);
+    }
+    if (h.viewers > 0) {
+      const [bx, by] = P(h.x + h.w - 1, h.y + 2);
+      const r = Math.max(7 * dpr, S * 2.6);
+      ctx.fillStyle = h.type === 'admin' || h.type === 'pit' ? '#c8402f' : '#e8443a';
+      ctx.beginPath(); ctx.arc(bx, by, r, 0, Math.PI * 2); ctx.fill();
+      ctx.lineWidth = 1.5 * dpr; ctx.strokeStyle = '#fff'; ctx.stroke();
+      ctx.fillStyle = '#fff'; ctx.font = `bold ${Math.round(r * 1.25)}px "DotGothic16", sans-serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(h.viewers, bx, by + dpr);
+    }
+  }
+  // 選択中の小人の名札
+  if (selected && !selected.gone) {
+    const [x, y] = P(selected.x, selected.y - 13);
+    label(nameOf(selected), x, y, {color:'#fff', stroke:INK, scale:.9});
+  }
+}
+const nameOf = a => a.kind === 'human' ? `お客さん${a.id}` : a.kind === 'crawler' ? a.bot : a.kind === 'spam' ? '営業ロボット' : `要注意 ${a.ip}`;
+
+// ===== 画面の情報（右の欄など） =====
+function clock(){ const d = new Date(simMs); return d.toTimeString().slice(0, 5); }
+const curHour = () => hourly[new Date(simMs).getHours()] ||= {humans:0, bots:0};
+function log(text, bad){
+  const li = document.createElement('li');
+  li.className = 'new' + (bad ? ' bad' : '');
+  li.innerHTML = `<time>${clock()}</time><span></span>`;
+  li.lastChild.textContent = text;
+  const ul = $('log'); ul.prepend(li);
+  while (ul.children.length > 50) ul.lastChild.remove();
+}
+function renderSide(){
+  const humansNow = agents.filter(a => a.kind === 'human' && !a.gone).length;
+  const botsNow = agents.filter(a => a.kind !== 'human' && !a.gone).length;
+  $('nowCount').textContent = humansNow;
+  $('nowRobots').textContent = `ロボット ${botsNow}（人数に含めない）`;
+  const d = new Date(simMs);
+  $('clock').textContent = clock();
+  $('date').textContent = `${d.getMonth() + 1}月${d.getDate()}日(${'日月火水木金土'[d.getDay()]})`;
+  $('sumDate').textContent = `0:00〜${clock()}`;
+  $('sHumans').textContent = stats.humans.toLocaleString();
+  $('sViews').textContent = stats.views.toLocaleString();
+  $('sBots').textContent = stats.bots.toLocaleString();
+  $('sAttacks').textContent = stats.attacks.toLocaleString();
+  const top = PAGES.slice().sort((p, q) => q.total - p.total).slice(0, 6), max = top[0].total;
+  $('rank').innerHTML = top.map((h, i) => `<li><span class="n">${i + 1}</span><div class="t">${h.name}<div class="bar" style="width:${(h.total / max * 100).toFixed(0)}%"></div></div><span class="c">${h.total}</span></li>`).join('');
+  drawTimeline();
+  renderKobito();
+}
+let kFilter = 'human';
+const iconCache = {};
+function agentIcon(a){
+  const s = a.kind === 'human' ? personSpr(a.src.color, a.returning ? RETURN_CLOTHES : CLOTHES, 0)
+    : a.kind === 'crawler' ? robotSpr('#a9bccf', '#3cf', 0) : a.kind === 'spam' ? robotSpr('#e5c34a', '#e33', 0) : hoodSpr(0);
+  const key = a.kind + (a.src ? a.src.color : '') + (a.returning ? 'r' : '');
+  return iconCache[key] ||= s.toDataURL();
+}
+function renderKobito(){
+  const live = agents.filter(a => !a.gone && (kFilter === 'human') === (a.kind === 'human'));
+  live.sort((p, q) => p.born - q.born);
+  $('kobitoCount').textContent = `${live.length}人`;
+  const now = simS();
+  const box = $('kobitoList');
+  if (!live.length) { box.innerHTML = '<div class="empty">いません</div>'; return; }
+  box.innerHTML = '';
+  for (const a of live.slice(0, 12)) {
+    const where = a.at ? `${a.at.name}を見ている` : a.state === 'leave' ? '帰るところ' : `${a.route[a.step]?.name ?? ''}へ移動中`;
+    const row = document.createElement('div');
+    row.className = 'krow' + (a === selected ? ' sel' : '') + (a.kind === 'attacker' ? ' bad' : '');
+    row.innerHTML = `<img src="${agentIcon(a)}" alt=""><span class="kn"></span><span>${a.kind === 'attacker' ? a.reqs + '回' : a.pageLog.length}</span><span>${fmt(now - a.born)}</span>`;
+    row.querySelector('.kn').innerHTML = `${nameOf(a)}<small>${where}</small>`;
+    row.onclick = () => openAgent(a);
+    box.appendChild(row);
+  }
+  if (live.length > 12) box.insertAdjacentHTML('beforeend', `<div class="empty">ほか ${live.length - 12}人</div>`);
+}
+function renderSuspects(){
+  const box = $('susList');
+  $('susCount').textContent = suspects.length ? `${suspects.filter(s => !s.banned).length}件` : '';
+  if (!suspects.length) { box.innerHTML = '<div class="empty">いまのところいません</div>'; return; }
+  box.innerHTML = '';
+  suspects.slice(0, 8).forEach(s => {
+    const row = document.createElement('div');
+    row.className = 'sus' + (s.banned ? ' banned' : '');
+    row.innerHTML = `<span class="tag ${s.tag === '侵入?' ? 'urgent' : ''}">${s.banned ? '締め出し済' : s.tag}</span>
+      <span class="ip">${s.ip}<small>${s.first}〜 ${s.hits}回</small></span><button>締め出す</button>`;
+    row.querySelector('button').onclick = () => ban(s);
+    row.onclick = e => { if (e.target.tagName !== 'BUTTON' && !s.agent.gone && agents.includes(s.agent)) openAgent(s.agent); };
+    box.appendChild(row);
+  });
+}
+function ban(s){
+  if (s.banned) return;
+  s.banned = true;
+  const a = s.agent;
+  if (agents.includes(a) && !a.gone) {
+    if (a.at) { a.at.viewers--; a.at = null; }
+    a.gone = simS(); puffs.push({x:a.x, y:a.y, t:simS()});
+  }
+  if (selected === a) closePop();
+  log(`${s.ip} を締め出しました（以後の接続を拒否）`);
+  renderSuspects();
+}
+
+const tl = $('timeline'), tg = tl.getContext('2d');
+function drawTimeline(){
+  const r = tl.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  tl.width = Math.round(r.width * d); tl.height = Math.round(r.height * d);
+  const w = tl.width, h = tl.height, bw = w / 24, cur = new Date(simMs).getHours();
+  const max = Math.max(10, ...hourly.filter(Boolean).map(v => v.humans + v.bots));
+  tg.clearRect(0, 0, w, h);
+  tg.font = `${10 * d}px "DotGothic16", sans-serif`; tg.textAlign = 'center'; tg.textBaseline = 'bottom';
+  hourly.forEach((v, i) => {
+    const x = i * bw + 1;
+    if (i % 3 === 0) { tg.fillStyle = '#7a6e5d'; tg.fillText(i, x + bw / 2, h); }
+    if (!v) return;
+    const usable = h - 12 * d;
+    const hh = v.humans / max * usable, hb = v.bots / max * usable;
+    tg.fillStyle = i === cur ? '#3a7d44' : '#8dbf7a'; tg.fillRect(x, usable - hh, bw - 2, hh);
+    tg.fillStyle = '#c9c0ab'; tg.fillRect(x, usable - hh - hb, bw - 2, hb);
+  });
+  const mx = (cur + new Date(simMs).getMinutes() / 60) * bw;
+  tg.fillStyle = '#c8402f'; tg.fillRect(mx, 0, 2 * d, h - 12 * d);
+}
+
+// ===== クリックで詳細 =====
+const pop = $('pop');
+function toWorld(e){ const r = cv.getBoundingClientRect(); return {x: ((e.clientX - r.left) * dpr - ox) / S, y: ((e.clientY - r.top) * dpr - oy) / S}; }
+cv.addEventListener('mousemove', e => {
+  const p = toWorld(e);
+  cv.style.cursor = hitAgent(p) || hitHouse(p) ? 'pointer' : 'default';
+});
+cv.addEventListener('click', e => {
+  const p = toWorld(e), a = hitAgent(p), h = !a && hitHouse(p);
+  if (a) openAgent(a, e); else if (h) openHouse(h, e); else closePop();
+});
+const hitAgent = p => agents.filter(a => !a.gone && Math.abs(a.x - p.x) < 5 && p.y > a.y - 12 && p.y < a.y + 2).sort((x, y) => y.y - x.y)[0];
+const hitHouse = p => HOUSES.find(h => p.x >= h.x - 1 && p.x <= h.x + h.w + 1 && p.y >= h.y - 1 && p.y <= h.y + h.h + 1);
+let popKind = null, popEvt = null;
+function placePop(e){
+  const wrap = $('stageWrap').getBoundingClientRect();
+  let x, y;
+  if (e) { x = e.clientX - wrap.left + 14; y = e.clientY - wrap.top + 14; popEvt = {x, y}; }
+  else ({x, y} = popEvt || {x:20, y:20});
+  pop.style.display = 'block';
+  const pw = pop.offsetWidth, ph = pop.offsetHeight;
+  pop.style.left = Math.max(6, Math.min(x, wrap.width - pw - 6)) + 'px';
+  pop.style.top = Math.max(6, Math.min(y, wrap.height - ph - 6)) + 'px';
+}
+function openAgent(a, e){
+  selected = a; selectedHouse = null; popKind = 'agent';
+  if (!e) {
+    // 一覧から選んだときは、町の中のその小人の横に出す
+    const r = cv.getBoundingClientRect();
+    e = {clientX: r.left + (ox + a.x * S) / dpr, clientY: r.top + (oy + (a.y - 12) * S) / dpr};
+  }
+  fillAgentPop(); placePop(e); renderKobito();
+}
+function fillAgentPop(){
+  const a = selected;
+  const kindLine = a.kind === 'human'
+    ? `${a.src.label} ・ ${a.mobile ? 'スマホ' : 'パソコン'} ・ ${a.returning ? 'また来た人' : 'はじめての人'}`
+    : a.kind === 'crawler' ? `検索・AIの自動巡回（人数に数えない）`
+    : a.kind === 'spam' ? 'お問い合わせフォームへの自動送信' : `攻撃の疑い ・ ${a.tag}`;
+  const nextH = a.route[a.step] && a.state !== 'leave' ? a.route[a.step] : null;
+  const stayed = simS() - a.born;
+  const rows = numbersOf(a, stayed).map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+  // ページごとの滞在時間（見ている途中のページは現在までの時間）
+  const durs = a.pageLog.map(p => ({h:p.h, d:p.dur ?? simS() - p.t, now:p.dur == null}));
+  const maxD = Math.max(1, ...durs.map(p => p.d));
+  const pages = durs.map(p => `<div class="pl"><span class="pn">${p.h.name}${p.now ? ' <em>見ている</em>' : ''}</span><span class="pd">${fmt(p.d)}</span>
+    <div class="pb" style="width:${(p.d / maxD * 100).toFixed(0)}%"></div></div>`).join('');
+  $('popBody').innerHTML = `<h4>${nameOf(a)}</h4><div class="meta">${kindLine}<br>${a.ip}</div>
+    <table class="nums">${rows}</table>
+    <div class="meta" style="margin:8px 0 3px">${a.kind === 'human' ? '見たページと滞在時間' : '訪れた場所'}</div>
+    <div class="pages">${pages || '<i>（移動中）</i>'}${a.state === 'walk' && nextH ? `<div class="pl next">→ ${nextH.name}へ移動中</div>` : ''}</div>
+    ${a.kind === 'attacker' && !a.suspect.banned ? '<button class="ban" id="popBan">この相手を締め出す</button>' : ''}`;
+  const b = $('popBan'); if (b) b.onclick = () => ban(a.suspect);
+}
+function fmt(sec){
+  sec = Math.max(0, Math.round(sec));
+  return sec < 60 ? `${sec}秒` : `${sec / 60 | 0}分${String(sec % 60).padStart(2, '0')}秒`;
+}
+function numbersOf(a, stayed){
+  if (a.kind === 'human') {
+    const done = a.pageLog.filter(p => p.dur != null);
+    const avg = done.length ? done.reduce((s, p) => s + p.dur, 0) / done.length : null;
+    return [
+      ['サイトにいる時間', fmt(stayed)],
+      ['見たページ', `${a.pageLog.length}ページ`],
+      ['1ページあたり', avg == null ? '—' : fmt(avg)],
+      ['これまでの訪問', a.visits === 1 ? 'はじめて' : `${a.visits}回目`],
+      [a.src.key === 'search' ? '検索した言葉' : a.src.key === 'direct' ? '来る前の場所' : '来る前のサービス', a.referrer],
+      ['端末', a.browser],
+      ['見つからないページ', `${a.notFound}回`],
+    ];
+  }
+  if (a.kind === 'attacker') return [
+    ['要求の回数', `${a.reqs}回`],
+    ['見つからないページ', `${a.notFound}回`],
+    ['ログイン試行', `${a.loginTries}回`],
+    ['名乗った名前', `${a.uaNames}種類`],
+    ['要求の速さ', `${(a.reqs / Math.max(stayed, 1) * 60).toFixed(0)}回/分`],
+    ['滞在時間', fmt(stayed)],
+  ];
+  return [
+    ['名前', a.kind === 'crawler' ? a.bot : '（偽装したブラウザ名）'],
+    ['要求の回数', `${a.reqs}回`],
+    ['巡回したページ', `${new Set(a.history).size}ページ`],
+    ...(a.kind === 'spam' ? [['フォーム送信', a.letter ? '0回（向かっている）' : '1回']] : []),
+    ['滞在時間', fmt(stayed)],
+  ];
+}
+function openHouse(h, e){
+  selectedHouse = h; selected = null; popKind = 'house';
+  fillHousePop(); placePop(e);
+}
+function fillHousePop(){
+  const h = selectedHouse;
+  const next = Object.entries(h.next).sort((a, b) => b[1] - a[1]).slice(0, 3);
+  $('popBody').innerHTML = `<h4>${h.name}</h4><div class="meta">${h.path}</div>
+    <table><tr><td>いま見ている人</td><td>${agents.filter(a => a.at === h && a.kind === 'human').length}</td></tr>
+    <tr><td>きょう見た人</td><td>${h.total}</td></tr></table>
+    ${next.length ? `<div class="meta" style="margin:6px 0 2px">次に行ったページ</div>${next.map(([n, c]) => `<div class="route"><span>${n}</span><i>${c}人</i></div>`).join('')}` : ''}`;
+}
+function closePop(){ pop.style.display = 'none'; selected = null; selectedHouse = null; popKind = null; }
+$('popX').onclick = closePop;
+
+// ===== 操作 =====
+function seg(id, fn){ $(id).querySelectorAll('button').forEach(b => b.onclick = () => { $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); fn(b); }); }
+seg('speedSeg', b => speed = +b.dataset.x);
+seg('kFilter', b => { kFilter = b.dataset.k; renderKobito(); });
+seg('skySeg', b => night = b.dataset.s === 'night');
+seg('viewSeg', b => { if (b.dataset.v !== 'town') { toast('この画面は次の段階で作ります'); setTimeout(() => $('viewSeg').firstElementChild.click(), 600); } });
+function toast(t){ const el = $('toast'); el.textContent = t; el.classList.add('on'); clearTimeout(toast.t); toast.t = setTimeout(() => el.classList.remove('on'), 1600); }
+
+// 凡例とロゴ
+(function(){
+  const items = [
+    [personSpr(SOURCES[0].color, CLOTHES, 0), '検索から来た人'],
+    [personSpr(SOURCES[1].color, CLOTHES, 0), '直接来た人'],
+    [personSpr(SOURCES[2].color, CLOTHES, 0), 'AIチャットから'],
+    [personSpr(SOURCES[3].color, CLOTHES, 0), 'SNSから'],
+    [personSpr(SOURCES[0].color, RETURN_CLOTHES, 0), 'また来た人（服）'],
+    [robotSpr('#a9bccf', '#3cf', 0), 'クローラー'],
+    [robotSpr('#e5c34a', '#e33', 0), '営業ロボット'],
+    [hoodSpr(0), '攻撃の疑い'],
+  ];
+  const box = $('legend');
+  for (const [s, t] of items) {
+    const c = document.createElement('canvas'); c.width = 9; c.height = 12; c.getContext('2d').drawImage(s, 0, 0);
+    const d = document.createElement('div'); d.append(c, t); box.appendChild(d);
+  }
+  $('logo').getContext('2d').drawImage(personSpr('#3b6fd6', CLOTHES, 0), 0, 0);
+})();
+
+// 最初から町に何人かいる状態にする
+for (let i = 0; i < 9; i++) {
+  const a = spawn('human');
+  stats.humans--; curHour().humans--;
+  const h = a.route[0], s = doorSpot(h, a);
+  a.x = s.x; a.y = s.y; a.wp = []; arrive(a); a.stayUntil = simS() + rand(1, 8);
+  a.born = a.pageLog[0].t = simS() - rand(5, 90);
+}
+for (let i = 0; i < 2; i++) { const a = spawn('crawler'); stats.bots--; const s = doorSpot(a.route[0]); a.x = s.x; a.y = s.y; a.wp = []; }
+log('監視をはじめました（デモデータで動いています）');
+
+resize();
+let last = performance.now(), sideT = 0;
+function loop(t){
+  const real = Math.min(.1, (t - last) / 1000); last = t;
+  const dt = real * speed;
+  simMs += dt * 1000;
+  update(dt); render();
+  sideT += real;
+  if (sideT > .5) { sideT = 0; renderSide(); if (popKind === 'agent' && selected) fillAgentPop(); if (popKind === 'house') fillHousePop(); }
+  requestAnimationFrame(loop);
+}
+renderSide(); renderSuspects();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
