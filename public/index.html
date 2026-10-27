@@ -727,11 +727,24 @@ const Live = {
   seenSessions: new Map(),  // きょう来たセッション → 種類（人数の集計用）
   firstSeen: new Map(),     // セッション → 最初のイベント（来訪元はここから取る）
   dayStart: new Date(new Date().setHours(0, 0, 0, 0)).getTime(),
+  // 通信の失敗には net:true を付け、画面の処理で起きたエラーと分ける。
+  // スリープ明けなどに応答が返らないまま止まらないよう、15秒で打ち切る
   async api(path){
-    const res = await fetch(path, {headers: {'x-passcode': Live.key}});
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+    let res;
+    try { res = await fetch(path, {headers: {'x-passcode': Live.key}, signal: ctl.signal, cache: 'no-store'}); }
+    catch (e) { throw Object.assign(new Error('通信できません（' + (e.name === 'AbortError' ? '15秒応答なし' : e.message) + '）'), {net: true}); }
+    finally { clearTimeout(timer); }
     if (res.status === 401) throw Object.assign(new Error('unauthorized'), {auth: true});
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return res.json();
+    if (!res.ok) throw Object.assign(new Error('収集サーバーのエラー（HTTP ' + res.status + '）'), {net: true});
+    try { return await res.json(); } catch (e) { throw Object.assign(new Error('応答が途中で切れました'), {net: true}); }
+  },
+  // 画面の処理で起きたエラーは、通信エラーとは別に記録へ出す（原因を追えるように）
+  reportBug(e){
+    console.error(e);
+    const msg = `画面の処理でエラーが起きました：${e && e.message || e}`;
+    if (Live.lastBug !== msg) log(msg, 'bad');
+    Live.lastBug = msg;
   },
   async start(){
     try {
@@ -753,34 +766,46 @@ const Live = {
       renderSide(); renderSuspects();
       Live.setStatus(true);
       Live.schedule();
+      // 画面に戻ったとき・ネットワークが戻ったときは、すぐ取りにいく
       document.addEventListener('visibilitychange', () => { if (!document.hidden) Live.schedule(0); });
+      addEventListener('online', () => Live.schedule(0));
       Live.refreshTimer ||= setInterval(() => Live.refreshTown().catch(() => {}), 10 * 60 * 1000);
     } catch (e) {
       if (e.auth) return askKey(Live.key ? '合言葉がちがいます' : '');
+      if (!e.net) return Live.reportBug(e);
       console.error(e);
-      Live.setStatus(false);
-      log('収集サーバーにつながりません。30秒後にもう一度つなぎます', 'bad');
-      setTimeout(Live.start, 30000);
+      Live.setStatus(false, e.message);
+      setTimeout(Live.start, 15000);
     }
   },
-  // 取りにいく間隔。見ているときは5秒、画面が隠れているときは1分、つながらないときは30秒
+  // 取りにいく間隔。見ているときは5秒、画面が隠れているときは1分。
+  // 失敗したらすぐ（5秒後に）やり直し、3回続けて失敗したら「接続できません」にして30秒ごとに試す
   timer: null,
   schedule(ms){
     clearTimeout(Live.timer);
-    const wait = ms ?? (!Live.ok ? 30000 : document.hidden ? 60000 : 5000);
+    const wait = ms ?? (!Live.ok ? 30000 : Live.fails ? 5000 : document.hidden ? 60000 : 5000);
     Live.timer = setTimeout(async () => { await Live.poll(); Live.schedule(); }, wait);
   },
   ok: true,
+  fails: 0,
   lastOk: Date.now(),
-  setStatus(ok){
-    const changed = ok !== Live.ok;
+  setStatus(ok, why){
+    const changed = ok !== Live.ok, downSince = Live.lastOk;
     Live.ok = ok;
-    if (ok) Live.lastOk = Date.now();
+    if (ok) { Live.lastOk = Date.now(); Live.fails = 0; }
     const m = $('mode');
     m.textContent = ok ? 'ライブ' : '接続できません';
     m.classList.toggle('live', ok); m.classList.toggle('down', !ok);
-    m.title = ok ? '' : `最後につながった時刻: ${new Date(Live.lastOk).toTimeString().slice(0, 5)}`;
-    if (changed) log(ok ? '収集サーバーにつながりました' : '収集サーバーにつながりません。計測が止まっている可能性があります', ok ? '' : 'bad');
+    m.title = ok ? '' : `最後につながった時刻: ${new Date(Live.lastOk).toTimeString().slice(0, 5)}${why ? '／' + why : ''}`;
+    if (!changed) return;
+    if (ok) log(`収集サーバーに再びつながりました（約${Math.max(1, Math.round((Date.now() - downSince) / 60000))}分 途切れていました）`);
+    else log(`収集サーバーにつながりません：${why || ''}。この画面の通信が切れているか、計測が止まっている可能性があります`, 'bad');
+  },
+  // 1回の失敗では表示を変えない（スリープ明けや Wi-Fi の切り替えで一瞬切れることがあるため）
+  netFail(e){
+    console.warn(e.message);
+    Live.fails++;
+    if (Live.fails >= 3) Live.setStatus(false, e.message);
   },
   // live = 町を見ている最中の作り直し。家の位置はなるべく変えず、新しいページは家を建てる
   buildTown(town, events, live = false){
@@ -828,6 +853,7 @@ const Live = {
     Live.polling = true;
     try {
       const {events} = await Live.api(`/api/events?after=${Live.lastId}`);
+      Live.setStatus(true);
       // まだ町にないページが出てきたら、サーバーが家にしたページだけを足して町を作り直す。
       // 区画のルールに当てはまらないページは家にせず、トップの前に立たせる
       const unknown = [...new Set(events.filter(e => (e.type === 'page_view' || e.type === 'page_resume') && !houseByPath.has(e.path)).map(e => e.path))]
@@ -836,11 +862,14 @@ const Live = {
         unknown.forEach(p => Live.unknownTried.add(p));
         await Live.refreshTown();
       }
-      for (const ev of events) Live.handle(ev, true);
-      Live.setStatus(true);
+      // 1件の処理でつまずいても、残りのイベントは続けて処理する
+      for (const ev of events) {
+        try { Live.handle(ev, true); } catch (e) { Live.lastId = Math.max(Live.lastId, ev.id); Live.reportBug(e); }
+      }
     } catch (e) {
       if (e.auth) askKey('合言葉がちがいます');
-      else Live.setStatus(false);
+      else if (e.net) Live.netFail(e);
+      else Live.reportBug(e);
     } finally { Live.polling = false; }
   },
   houseFor(path){ return houseByPath.get(path) || TOP; },
